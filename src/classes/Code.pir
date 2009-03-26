@@ -136,6 +136,25 @@ Note that we currently do this by adding the method to Parrot's
     .return ($P0)
 .end
 
+.include 'include/except_severity.pasm'
+.include 'include/except_types.pasm'
+.sub 'leave' :method
+    .param pmc arg :optional
+    .param int has_arg :opt_flag
+    .local pmc hash, e
+    e = new 'Exception'
+    e['severity'] = .EXCEPT_NORMAL
+    e['type'] = .CONTROL_LEAVE
+    hash = new 'Hash'
+    hash['target'] = self
+    unless has_arg, no_arg
+    hash['value'] = arg
+  no_arg:
+    e['payload'] = hash
+    throw e
+
+.end
+
 
 =item perl()
 

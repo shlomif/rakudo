@@ -110,16 +110,43 @@ method statement_block($/, $key) {
             @handlers.push(
                 PAST::Control.new(
                     PAST::Op.new(
-                        :pasttype('pirop'),
-                        :pirop('return'),
-                        PAST::Var.new(
-                            :scope('keyed'),
+                        :pasttype('if'),
+                        PAST::Op.new(
+                            :pasttype('call'),
+                            :name('infix:eq'),
                             PAST::Var.new(
                                 :scope('keyed'),
-                                PAST::Var.new( :name('exception'), :scope('register') ),
-                                'payload',
+                                PAST::Var.new(
+                                    :scope('keyed'),
+                                    PAST::Var.new( :name('exception'), :scope('register') ),
+                                    'payload',
+                                ),
+                                'target',
                             ),
-                            'value',
+                            PAST::Var.new(
+                                :scope('keyed'),
+                                PAST::Op.new( :pasttype('pirop'), :pirop('getinterp PP')),
+                                #PAST::Op.new( :pasttype('pirop'), :pirop('new'), 'ParrotInterpreter'),
+                                'sub',
+                            ),
+                        ),
+                        PAST::Op.new(
+                            :pasttype('pirop'),
+                            :pirop('return'),
+                            PAST::Var.new(
+                                :scope('keyed'),
+                                PAST::Var.new(
+                                    :scope('keyed'),
+                                    PAST::Var.new( :name('exception'), :scope('register') ),
+                                    'payload',
+                                ),
+                                'value',
+                            ),
+                        ),
+                        PAST::Op.new(
+                            :pasttype('pirop'),
+                            :pirop('rethrow'),
+                            PAST::Var.new( :name('exception'), :scope('register') ),
                         ),
                     ),
                     :handle_types('LEAVE')
