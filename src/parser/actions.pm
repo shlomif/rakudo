@@ -99,6 +99,30 @@ method statement_block($/, $key) {
     }
     if $key eq 'close' {
         my $past := @?BLOCK.shift();
+        # Add a leave() handler to the block.
+        # We don't add it to the main block of the file mostly
+        # to not fail badly on the evil hack in settings.pm
+        if +@?BLOCK > 0 {
+            my @handlers;
+            if $past.handlers() {
+                @handlers := $past.handlers();
+            }
+            @handlers.push(
+                PAST::Control.new(
+                    PAST::Op.new(
+                        :pasttype('pirop'),
+                        :pirop('return'),
+                        PAST::Var.new(
+                            :scope('keyed'),
+                            PAST::Var.new( :name('exception'), :scope('register') ),
+                            'payload',
+                        ),
+                    ),
+                    :handle_types('LEAVE')
+                )
+            );
+            $past.handlers(@handlers);
+        }
         $past.push($($<statementlist>));
         make $past;
     }

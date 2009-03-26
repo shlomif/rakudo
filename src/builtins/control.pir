@@ -163,6 +163,19 @@ the moment -- we'll do more complex handling a bit later.)
     throw e
 .end
 
+.sub 'leave'
+    .param pmc arg :optional
+    .param int has_arg :opt_flag
+    .local pmc e
+    e = new 'Exception'
+    e['severity'] = .EXCEPT_NORMAL
+    e['type'] = .CONTROL_LEAVE
+    unless has_arg, no_arg
+    e['payload'] = arg
+  no_arg:
+    throw e
+.end
+
 =item term:...
 
 =cut
