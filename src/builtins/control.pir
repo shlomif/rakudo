@@ -166,13 +166,17 @@ the moment -- we'll do more complex handling a bit later.)
 .sub 'leave'
     .param pmc arg :optional
     .param int has_arg :opt_flag
-    .local pmc e
+    .local pmc hash, fail, e
     e = new 'Exception'
     e['severity'] = .EXCEPT_NORMAL
     e['type'] = .CONTROL_LEAVE
+    hash = new 'Hash'
+    fail = get_hll_global ['Bool'], 'False'
+    hash['target'] = fail
     unless has_arg, no_arg
-    e['payload'] = arg
+    hash['value'] = arg
   no_arg:
+    e['payload'] = hash
     throw e
 .end
 

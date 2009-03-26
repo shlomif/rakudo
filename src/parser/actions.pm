@@ -114,8 +114,12 @@ method statement_block($/, $key) {
                         :pirop('return'),
                         PAST::Var.new(
                             :scope('keyed'),
-                            PAST::Var.new( :name('exception'), :scope('register') ),
-                            'payload',
+                            PAST::Var.new(
+                                :scope('keyed'),
+                                PAST::Var.new( :name('exception'), :scope('register') ),
+                                'payload',
+                            ),
+                            'value',
                         ),
                     ),
                     :handle_types('LEAVE')
