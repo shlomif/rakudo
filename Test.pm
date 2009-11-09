@@ -92,29 +92,27 @@ multi sub is_approx(Object $got, Object $expected) is export(:DEFAULT) {
     is_approx($got, $expected, '');
 }
 
-multi sub todo($reason, $count) is export(:DEFAULT) {
+multi sub todo($reason, Int $count where { $count > 0 } ) is export(:DEFAULT) {
     $todo_upto_test_num = $num_of_tests_run + $count;
     $todo_reason = '# TODO ' ~ $reason;
 }
 
-multi sub todo($reason) is export(:DEFAULT) {
-    $todo_upto_test_num = $num_of_tests_run + 1;
-    $todo_reason = '# TODO ' ~ $reason;
-}
+multi sub todo($reason) is export(:DEFAULT) { todo( $reason, 1 ) }
 
 multi sub skip()                is export(:DEFAULT) { proclaim(1, "# SKIP"); }
-multi sub skip($reason)         is export(:DEFAULT) { proclaim(1, "# SKIP " ~ $reason); }
-multi sub skip($count, $reason) is export(:DEFAULT) {
+multi sub skip($reason)         is export(:DEFAULT) { skip(1, $reason); }
+multi sub skip(Int $count where { $count > 0 }, $reason) is export(:DEFAULT) {
     for 1..$count {
         proclaim(1, "# SKIP " ~ $reason);
     }
 }
 
-multi sub skip_rest() is export(:DEFAULT) {
-    skip($num_of_tests_planned - $num_of_tests_run, "");
-}
+multi sub skip_rest() is export(:DEFAULT) { skip_rest( '' ) }
 
 multi sub skip_rest($reason) is export(:DEFAULT) {
+    if $no_plan {
+        die "Can't skip the rest of the plan without a plan.";
+    }
     skip($num_of_tests_planned - $num_of_tests_run, $reason);
 }
 
