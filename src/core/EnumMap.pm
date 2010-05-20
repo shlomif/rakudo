@@ -1,4 +1,4 @@
-augment class EnumMap {
+augment class EnumMap does Associative {
     multi method ACCEPTS(Regex $topic) {
         for @.keys -> $k {
             if $topic.ACCEPTS($k) {

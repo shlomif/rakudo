@@ -503,7 +503,6 @@ our multi sub infix:<eqv>(Capture $a, Capture $b) {
     @($a) eqv @($b) && %($a) eqv %($b)
 }
 
-class EnumMap { ... }
 our multi sub infix:<eqv>(EnumMap $a, EnumMap $b) {
     if +$a != +$b { return Bool::False }
     for $a.kv -> $k, $v {

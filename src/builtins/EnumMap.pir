@@ -1,9 +1,11 @@
 .namespace ['EnumMap']
 
 .sub 'onload' :anon :load :init
-    .local pmc p6meta, enummapproto
+    .local pmc p6meta
+    .local pmc enummapproto
+
     p6meta = get_hll_global ['Mu'], '$!P6META'
-    enummapproto = p6meta.'new_class'('EnumMap', 'parent'=>'Cool', 'does_role'=>'Associative', 'attr'=>'$!storage')
+    enummapproto = p6meta.'new_class'('EnumMap', 'parent'=>'Cool', 'attr'=>'$!storage')
 .end
 
 .sub 'new' :method
@@ -13,11 +15,11 @@
     .return (self)
 .end
 
-.sub 'postcircumfix:<{ }>' :method :multi
+.sub 'postcircumfix:<{ }>' :method
     .param pmc key
-
     .local pmc self
     .local pmc return
+
     $P0 = getattribute self, '$!storage'
     $P1 = find_lex '$key'
     return = $P0[key]
@@ -29,7 +31,7 @@
     .return (return)
 .end
 
-.sub 'elems' :method :multi
+.sub 'elems' :method :multi()
     $P0 = getattribute self, '$!storage'
     $I0 = elements $P0
     $P1 = box $I0
