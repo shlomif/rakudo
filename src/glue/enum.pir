@@ -39,8 +39,8 @@ Constructs a EnumMap, based upon the values list.
     goto values_loop
 
   pair:
-    cur_val = cur_item.'value'()
-    $P0 = cur_item.'key'()
+    cur_val = getattribute cur_item, '$!value'
+    $P0 = getattribute cur_item, '$!key'
     enumhash[$P0] = cur_val
     cur_val = cur_val.'succ'()
     goto values_loop

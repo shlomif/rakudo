@@ -6,3 +6,5 @@ augment class Bool {
 
     method Bridge() { self ?? 1.Bridge !! 0.Bridge }
 }
+
+enum Order (Increase => 3, Same => 0, Decrease => 1);

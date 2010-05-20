@@ -1367,7 +1367,13 @@ method type_declarator:sym<enum>($/) {
         my $compiled := PAST::Compiler.compile(PAST::Block.new(
             :hll($?RAKUDO_HLL), $value_ast
         ));
-        my $result := (pir::find_sub_not_null__ps('!YOU_ARE_HERE'))($compiled);
+        my $executer := pir::get_hll_global__ps('!YOU_ARE_HERE');
+        my $result;
+        if pir::isnull($executer) {
+            $result := $compiled();
+        } else {
+            $result := $executer($compiled);
+        }
         
         # Only support our-scoped so far.
         unless $*SCOPE eq '' || $*SCOPE eq 'our' {
@@ -1377,8 +1383,9 @@ method type_declarator:sym<enum>($/) {
         # Install names.
         $/.CURSOR.add_name(~$<name>[0]);
         for $result {
-            $/.CURSOR.add_name(~$_.key);
-            $/.CURSOR.add_name(~$<name>[0] ~ '::' ~ ~$_.key);
+            my $key := pir::getattribute__pps($_, '$!key');
+            $/.CURSOR.add_name(~$key);
+            $/.CURSOR.add_name(~$<name>[0] ~ '::' ~ ~$key);
         }
         
         # Emit code to set up named enum.
