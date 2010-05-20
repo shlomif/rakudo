@@ -1,4 +1,4 @@
-.namenspace ['EnumMap']
+.namespace ['EnumMap']
 
 .sub 'onload' :anon :load :init
     .local pmc p6meta, enummapproto
@@ -10,6 +10,7 @@
     .param pmc values :named :slurpy
 
     setattribute self, '$!storage', values
+    .return (self)
 .end
 
 .sub 'postcircumfix:<{ }>' :method :multi
@@ -22,15 +23,15 @@
     return = $P0[key]
     unless null return goto done
     return = new ['Proxy']
-    setattribute %r, '$!base', $P0
-    setattribute %r, '$!key', $P1
+    setattribute return, '$!base', $P0
+    setattribute return, '$!key', $P1
   done:
-    .return(return)
+    .return (return)
 .end
 
 .sub 'elems' :method :multi
     $P0 = getattribute self, '$!storage'
     $I0 = elements $P0
     $P1 = box $I0
-    .return($P1)
+    .return ($P1)
 .end
