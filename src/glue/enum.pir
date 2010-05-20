@@ -42,7 +42,7 @@ Constructs a EnumMap, based upon the values list.
     cur_val = getattribute cur_item, '$!value'
     $P0 = getattribute cur_item, '$!key'
     enumhash[$P0] = cur_val
-    cur_val = cur_val.'succ'()
+    inc cur_val
     goto values_loop
 
   values_loop_end:
