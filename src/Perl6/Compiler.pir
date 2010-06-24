@@ -33,6 +33,8 @@ Perl6::Compiler - Perl6 compiler
 #for sysinfo
 .loadlib 'sys_ops'
 
+.include 'src/gen/perl6-optimizer.pir'
+
 .sub '' :anon :load :init
     load_bytecode 'P6Regex.pbc'
 
