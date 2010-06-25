@@ -1,5 +1,5 @@
 INIT {
-    pir::load_bytecode('PAST/Pattern.pbc');
+#    pir::load_bytecode('PAST/Pattern.pbc');
 };
 
 class Perl6::Optimizer is HLL::Compiler {

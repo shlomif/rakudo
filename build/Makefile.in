@@ -53,6 +53,7 @@ PERL6_PBC     = perl6.pbc
 PERL6_EXE     = perl6$(EXE)
 PERL6_G       = src/gen/perl6-grammar.pir
 PERL6_A       = src/gen/perl6-actions.pir
+PERL6_O       = src/gen/perl6-optimizer.pir
 S1_PERL6_PBC  = src/gen/$(PERL6_PBC)
 CORE_PIR      = src/gen/core.pir
 GROUP         = perl6_group
@@ -77,6 +78,7 @@ SOURCES = \
   src/gen/backtraceprinter_pm.pir \
   $(PERL6_G) \
   $(PERL6_A) \
+  $(PERL6_O) \
   $(DYNEXT_TARGET)
 
 BUILTINS_PIR = \
@@ -326,6 +328,10 @@ $(PERL6_G): $(NQP_EXE) src/Perl6/Grammar.pm
 $(PERL6_A): $(NQP_EXE) src/Perl6/Actions.pm
 	$(NQP_EXE) --target=pir --output=$(PERL6_A) --encoding=utf8 \
 	    src/Perl6/Actions.pm
+
+$(PERL6_O): $(NQP_EXE) src/Perl6/Optimizer.pm
+	$(NQP_EXE) --target=pir --output=$(PERL6_O) --encoding=utf8 \
+	    src/Perl6/Optimizer.pm
 
 src/gen/signature_pm.pir: $(PARROT) $(NQP_PBC) src/Perl6/Compiler/Signature.pm
 	$(NQP_EXE) --output=src/gen/signature_pm.pir --encoding=utf8 \
