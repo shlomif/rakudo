@@ -138,6 +138,8 @@ Perl6::Compiler - Perl6 compiler
     $P0 = getattribute nqpproto, '@cmdoptions'
     push $P0, 'parsetrace'
 
+    nqpproto.'addstage'('assign_type_check', 'after' => 'past')
+
     true = get_hll_global ['Bool'], 'True'
 
     # Set up @*INC from $PERL6LIB, languages/perl6/lib and ~/.perl6/lib
