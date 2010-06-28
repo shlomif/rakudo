@@ -33,7 +33,10 @@ module Perl6::Compiler {
                                 PAST::Pattern::Var.new(),
                                 PAST::Pattern::Val.new(:returns(&typed_value)),
                         );
-        my &fold    := sub ($/) { mydump($/.from); $/.from };
+        my &fold    := sub ($/) {
+#            mydump($/.from);
+            $/.from;
+        };
         $pattern.transform($past, &fold);
     }
 }
