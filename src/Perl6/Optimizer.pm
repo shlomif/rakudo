@@ -25,6 +25,45 @@ sub mydump($x) {
 }
 
 module Perl6::Compiler {
+    method augment_lexinfo($past) {
+        # always match a block
+        my $find_blocks = PAST::Pattern::Block.new();
+
+        my &fold_blocks := sub($/) {
+            my $current_block := $/.orig;
+
+            # for each block, find immediate child blocks, and add
+            # info from the current lexical block to it
+            my &add_lex := sub ($/) {
+                # magic PAST transformation here which I have
+                # yet to figure out :-)
+                # should add info about lexicals from $current_block
+                # to $/.orig
+            }
+            $find_child_blocks := PAST::Pattern::Block.new();
+            $find_child_blocks.transform(
+                                $/.orig,
+                                &add_lex,
+                                :depth_limited_by($find_blocks),
+                            );
+
+            # for each block, find variables declarations that are
+            # directly in the block, and not in an inner block
+            my $find_direct_vars := PAST::Pattern::Var.new();
+
+            my &link_var = sub ($/) {
+                my $past = $/.orig.clone;
+                $past<block> := $current_block;
+                $past;
+            };
+
+            $find_direct_vars.transform($/.orig,
+                                &link_var,
+                                :depth_limited_by($find_blocks),
+                        );
+        }
+    }
+
     method assign_type_check($past) {
         my &assignment  := sub ($opName) { $opName eq '&infix:<=>' }
         my &typed_value := sub ($val)    { ?~$val                   }
