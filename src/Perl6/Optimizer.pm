@@ -27,7 +27,7 @@ sub mydump($x) {
 module Perl6::Compiler {
     method augment_lexinfo($past) {
         # always match a block
-        my $find_blocks = PAST::Pattern::Block.new();
+        my $find_blocks := PAST::Pattern::Block.new();
 
         my &fold_blocks := sub($/) {
             my $current_block := $/.orig;
@@ -39,27 +39,29 @@ module Perl6::Compiler {
                 # yet to figure out :-)
                 # should add info about lexicals from $current_block
                 # to $/.orig
+                $/.orig;
             }
-            $find_child_blocks := PAST::Pattern::Block.new();
+            my $find_child_blocks := PAST::Pattern::Block.new();
             $find_child_blocks.transform(
                                 $/.orig,
                                 &add_lex,
-                                :depth_limited_by($find_blocks),
+                                :descend_until($find_blocks),
+                                :min_depth(1),
                             );
 
             # for each block, find variables declarations that are
             # directly in the block, and not in an inner block
             my $find_direct_vars := PAST::Pattern::Var.new();
 
-            my &link_var = sub ($/) {
-                my $past = $/.orig.clone;
+            my &link_var := sub ($/) {
+                my $past := $/.orig.clone;
                 $past<block> := $current_block;
                 $past;
             };
 
             $find_direct_vars.transform($/.orig,
                                 &link_var,
-                                :depth_limited_by($find_blocks),
+                                :descend_until($find_blocks),
                         );
         }
     }
@@ -76,7 +78,8 @@ module Perl6::Compiler {
 #            mydump($/.from);
             $/.from;
         };
-        $pattern.transform($past, &fold);
+#        $pattern.transform($past, &fold);
+        $past;
     }
 }
 
