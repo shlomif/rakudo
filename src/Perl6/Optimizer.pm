@@ -75,8 +75,8 @@ module Perl6::Compiler {
                                 PAST::Pattern::Val.new(:returns(&typed_value)),
                         );
         my &fold    := sub ($/) {
-#            mydump($/.from);
-            $/.from;
+#            mydump($/.orig);
+            $/.orig;
         };
 #        $pattern.transform($past, &fold);
         $past;
