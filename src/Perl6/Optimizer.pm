@@ -78,8 +78,7 @@ module Perl6::Compiler {
 #            mydump($/.orig);
             $/.orig;
         };
-#        $pattern.transform($past, &fold);
-        $past;
+        $pattern.transform($past, &fold);
     }
 }
 
