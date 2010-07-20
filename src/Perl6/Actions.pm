@@ -2801,6 +2801,21 @@ class Perl6::RegexActions is Regex::P6Regex::Actions {
         make $arglist;
     }
 
+    method named_assertion($/) {
+        my $name    := ~$<longname>;
+        for @Perl6::Actions::BLOCK {
+            my %entry := $_.symbol($name);
+            if %entry<scope> eq 'lexical' {
+                return PAST::Regex.new( '!INTERPOLATE', 
+                           PAST::Var.new( :name('&' ~ $name), :scope<lexical> ),
+                           :name($name),
+                           :pasttype<subrule>, :subtype<capture>, :node($/));
+            }
+            last if %entry;
+        }
+        PAST::Regex.new( $name, :name($name),
+                         :pasttype('subrule'), :subtype('capture'), :node($/) );
+    }
 }
 
 # Takes a block and adds a signature to it, as well as code to bind the call
