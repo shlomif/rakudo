@@ -30,18 +30,13 @@ class Set does Associative {
     method elems() { +@!elems }
     method exists($elem) { contains(@!elems, $elem) }
 
-    multi method postcircumfix:<{ }>($elem) {
-        contains(@!elems, $elem)
-    }
-    multi method postcircumfix:<{ }>(@elems) {
-        map { contains(@!elems, $_) }, @elems;
-    }
-    multi method postcircumfix:<{ }>(%set) {
-        self.postcircumfix:<{ }>(%set.keys);
+    method at_key($key) {
+        contains(@!elems, $key);
     }
 
     method Num() { +self.elems }
     method Bool() { ?self.elems }
+    method hash() { hash @!elems Z=> True xx * }
 
     multi method union(@otherset) {
         self.new((@!elems, @otherset));
