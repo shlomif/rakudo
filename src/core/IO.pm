@@ -170,6 +170,11 @@ class IO is Cool {
     multi method z() {
         $.e && $.s == 0;
     }
+
+    multi method created() { ::Instant.from-posix($.stat.createtime) }
+    multi method modified() { ::Instant.from-posix($.stat.modifytime) }
+    multi method accessed() { ::Instant.from-posix($.stat.accesstime) }
+    multi method changed() { ::Instant.from-posix($.stat.changetime) }
 }
 
 multi sub get(IO $filehandle = $*ARGFILES) { $filehandle.get };
@@ -256,7 +261,7 @@ multi sub note(*@args) {
     $*ERR.say(@args);
 }
 
-multi sub dir($path as Str, Mu :$test = none('.', '..')) {
+multi sub dir($path as Str = '.', Mu :$test = none('.', '..')) {
     Q:PIR {
         $P0 = find_lex '$path'
         $P1 = new ['OS']

@@ -17,10 +17,11 @@ our multi sub sequentialargs(&op, Mu \$a, Mu \$b) {
 
 our multi sub zipwith(&op, $lhs, $rhs) {
     my $lhs-list = flat($lhs.list);
-    my $rhs-list = flat($rhs.flat);
+    my $rhs-list = flat($rhs.list);
+    my ($a, $b);
     gather while ?$lhs-list && ?$rhs-list {
-        my $a = $lhs-list.shift;
-        my $b = $rhs-list.shift;
+        $a = $lhs-list.shift unless $lhs-list[0] ~~ ::Whatever;
+        $b = $rhs-list.shift unless $rhs-list[0] ~~ ::Whatever;
         take &op($a, $b);
     }
 }
@@ -213,10 +214,13 @@ our multi sub reducewith(&op, *@args,
 # this fails for operators defined in PIR, so some of them are commented out.
 our multi sub infix:<**>($x = 1) { +$x }
 our multi sub infix:<*>($x = 1)  { +$x }
+our multi sub infix:<?&>($x = Bool::True) { ?$x }
 our multi sub infix:<+&>() { +^0 }
 our multi sub infix:<+>($x = 0)  { +$x }
 our multi sub infix:<->($x = 0)  { +$x }
 our multi sub infix:<~>($x = '')  { ~$x }
+our multi sub infix:<?|>($x = Bool::False) { ?$x }
+our multi sub infix:<?^>($x = Bool::False) { ?$x }
 our multi sub infix:<+|>() { 0 }
 our multi sub infix:<+^>() { 0 }
 our multi sub infix:<~|>() { '' }
@@ -243,9 +247,12 @@ our multi sub infix:<ne>($x?)     { Bool::True }
 #our multi sub infix:<===>($x?)    { Bool::True }
 our multi sub infix:<eqv>($x?)    { Bool::True }
 #
-our multi sub infix:<||>()     { Bool::False }
-our multi sub infix:<or>()     { Bool::False }
-#our multi sub infix:<^^>()     { Bool::False }
+our multi sub infix:<&&>(Mu $x = Bool::True)      { $x }
+our multi sub infix:<and>(Mu $x = Bool::True)     { $x }
+our multi sub infix:<||>(Mu $x = Bool::False)     { $x }
+our multi sub infix:<or>(Mu $x = Bool::False)     { $x }
+#our multi sub infix:<^^>(Mu $x = Bool::False)    { $x }
+#our multi sub infix:<xor>(Mu $x = Bool::False)   { $x }
 our multi sub infix:<//>()     { Any }
 #our multi sub infix:<min>()    { +Inf }
 #our multi sub infix:<max>()    { -Inf }

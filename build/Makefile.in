@@ -227,6 +227,8 @@ CORE_SOURCES = \
   src/core/system.pm \
   src/cheats/process.pm \
   src/core/tai-utc.pm \
+  src/core/Duration.pm \
+  src/core/Instant.pm \
   src/core/Temporal.pm \
   src/core/Match.pm \
   src/core/Attribute.pm \
@@ -430,7 +432,7 @@ stresstest: testable t/spectest.data
 
 spectest_checkout : t/spec
 t/spec :
-	git clone git://github.com/perl6/spectests.git t/spec
+	git clone git://github.com/perl6/roast.git t/spec
 
 spectest_update :
 	-cd t/spec && git pull
@@ -440,7 +442,7 @@ rakudo_test_run.tar.gz: testable t/spectest.data
 	- $(HARNESS_WITH_FUDGE_JOBS) --tests-from-file=t/spectest.data --archive rakudo_test_run.tar.gz --parrot_revision @revision@
 
 spectest_smolder: rakudo_test_run.tar.gz
-	curl -F architecture=@cpuarch@ -F platform=@osname@ -F revision=`git log -1 --pretty=format:%H` -F report_file=@rakudo_test_run.tar.gz http://smolder.plusthree.com/app/public_projects/process_add_report/18
+	curl -F architecture=@cpuarch@ -F platform=@osname@ -F revision=`git log -1 --pretty=format:%H` -F report_file=@rakudo_test_run.tar.gz -F username=parrot-autobot -F password=qa_rocks http://smolder.parrot.org/app/projects/process_add_report/5
 
 testable : all spectest_checkout spectest_update
 

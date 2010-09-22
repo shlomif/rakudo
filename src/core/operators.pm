@@ -328,112 +328,101 @@ our multi sub item($item) {
     $item
 }
 
-our multi sub infix:<...>(@lhs is copy, $rhs) {
-    my sub succ-or-pred($lhs, $rhs) {
-        if $lhs ~~ Str && $rhs ~~ Str && $lhs.chars == 1 && $rhs.chars == 1 {
-            if $lhs cmp $rhs != 1 {
-                -> $x { $x.ord.succ.chr };
+
+our sub _HELPER_generate-series(@lhs, $rhs , :$exclude-limit) {
+    my sub get-next-closure (@lhs, $limit? ) {
+        fail "Need something on the LHS" unless @lhs.elems;
+        fail "Need more items on the LHS" if @lhs[*-1] ~~ Code && @lhs[*-1] !~~ Multi && @lhs[*-1].count != Inf && @lhs.elems < @lhs[*-1].count;
+
+        #BEWARE: Here be ugliness
+        if @lhs[* - 1] ~~ Code { # case: (a,b,c,{code}) ... *
+            return @lhs[*-1] if @lhs[*-1] !~~ Multi;
+            return @lhs[*-1].candidates[0] if @lhs[*-1].candidates.elems == 1;
+            if (@lhs[*-1].candidates>>.count).grep( * == 2) {
+                return { @lhs[*-1]($^a,$^b) } ; # case: (a,b,c,&[+] ... *
             } else {
-                -> $x { $x.ord.pred.chr };
-            }
-        } elsif $rhs ~~ Whatever || $lhs cmp $rhs != 1 {
-            -> $x { $x.succ };
-        } else {
-            -> $x { $x.pred };
-        }
-    }
-
-    my sub succ-or-pred2($lhs0, $lhs1, $rhs) {
-        if $lhs1 cmp $lhs0 == 0 {
-            $next = { $_ };
-        } else {
-            $next = succ-or-pred($lhs1, $rhs);
-        }
-    }
-
-    my sub is-on-the-wrong-side($first , $second , $third , $limit , $is-geometric-switching-sign) {
-        return Bool::False if $limit ~~ Whatever;
-        if $is-geometric-switching-sign {
-            ($second.abs >= $third.abs && $limit.abs > $first.abs) || ($second.abs <= $third.abs && $limit.abs < $first.abs);
-        } else {
-            ($second >= $third && $limit > $first) || ($second <= $third && $limit < $first);
-        }
-    }
-
-    my $limit;
-    $limit = $rhs if !($rhs ~~ Whatever);
-
-    my $is-geometric-switching-sign = Bool::False;
-    my $next;
-    if @lhs[@lhs.elems - 1] ~~ Code {
-        $next = @lhs.pop;
-    } else {
-        given @lhs.elems {
-            when 0 { fail "Need something on the LHS"; }
-            when 1 {
-                $next = succ-or-pred(@lhs[0], $rhs)
-            }
-            default {
-                my $diff = @lhs[*-1] - @lhs[*-2];
-                if $diff == 0 {
-                    $next = succ-or-pred2(@lhs[*-2], @lhs[*-1], $rhs)
-                } elsif @lhs.elems == 2 || @lhs[*-2] - @lhs[*-3] == $diff {
-                    return Nil if is-on-the-wrong-side(@lhs[0] , @lhs[*-2] , @lhs[*-1] , $rhs , Bool::False);
-                    $next = { $_ + $diff };
-                } elsif @lhs[*-2] / @lhs[*-3] == @lhs[*-1] / @lhs[*-2] {
-                    $is-geometric-switching-sign = (@lhs[*-2] * @lhs[*-1] < 0);
-                    return Nil if is-on-the-wrong-side(@lhs[*-3] , @lhs[*-2] , @lhs[*-1] , $rhs , $is-geometric-switching-sign) ;
-                    my $factor = @lhs[*-2] / @lhs[*-3];
-                    if $factor ~~ ::Rat && $factor.denominator == 1 {
-                        $factor = $factor.Int;
-                    }
-                    $next = { $_ * $factor };
-                } else {
-                    fail "Unable to figure out pattern of series";
-                }
+                fail "Don't know how to handle Multi on the lhs yet";
             }
         }
+        return { .succ }  if @lhs.elems == 1 && $limit ~~ Code;
+        return { $_ } if @lhs.elems > 1 && @lhs[*-1] cmp @lhs[*-2] == 0 ;  # case: (a , a) ... *
+
+        if  @lhs[*-1] ~~ Str ||  $limit ~~ Str {
+            if @lhs[*-1].chars == 1 && $limit.defined && $limit.chars == 1 {
+                return { .ord.succ.chr } if @lhs[*-1] lt  $limit;# case (... , non-number) ... limit
+                return { .ord.pred.chr } if @lhs[*-1] gt  $limit;# case (... , non-number) ... limit
+            }
+            return { .succ } if $limit.defined && @lhs[*-1] lt  $limit;# case (... , non-number) ... limit
+            return { .pred } if $limit.defined && @lhs[*-1] gt  $limit;# case (... , non-number) ... limit
+            return { .pred } if @lhs.elems > 1 && @lhs[*-2] gt  @lhs[*-1];# case (non-number , another-smaller-non-number) ... *
+            return { .succ } ;# case (non-number , another-non-number) ... *
+        }
+        return { .pred } if @lhs.elems == 1 && $limit.defined && $limit before @lhs[* - 1];  # case: (a) ... b where b before a
+        return { .succ } if @lhs.elems == 1 ;  # case: (a) ... *
+
+        my $diff = @lhs[*-1] - @lhs[*-2];
+        return { $_ + $diff } if @lhs.elems == 2 || @lhs[*-2] - @lhs[*-3] == $diff ; #Case Arithmetic series
+
+        if @lhs[*-2] / @lhs[*-3] == @lhs[*-1] / @lhs[*-2] { #Case geometric series
+            my $factor = @lhs[*-2] / @lhs[*-3];
+            if $factor ~~ ::Rat && $factor.denominator == 1 {
+                $factor = $factor.Int;
+            }
+            return { $_ * $factor } ;
+        }
+        fail "Unable to figure out pattern of series";
     }
 
-    my $arity = any( $next.signature.params>>.slurpy ) ?? Inf !! $next.count;
+    my sub infinite-series (@lhs, $limit ) {
+        gather {
+            my $i = 0;
+            while @lhs[$i+1].defined { take @lhs[$i]; $i++; } #We blindly take all elems of the LHS except last one.
+            if @lhs[$i] !~~ Code { take @lhs[$i]; $i++; }     #We take the last element only when it is not code
 
-    gather {
-        my @args;
-        my $previous;
-        my $top = $arity min @lhs.elems;
-        my $lhs-orig-count = @lhs.elems ;
-        my $count=0;
+            my $next = get-next-closure(@lhs , $limit );
+            my $arity = $next.count;
+            my @args=@lhs[$i-($arity ~~ Inf ?? $i !! $arity) .. $i-1]; #We make sure there are $arity elems in args
 
-        if @lhs || !$limit.defined || $limit cmp $previous != 0 {
-            loop {
-                @args.push(@lhs[0]) if @lhs && $count >= $lhs-orig-count - $top;
-                my $current = @lhs.shift()  // $next.(|@args) // last;
-
-                my $cur_cmp = 1;
-                if $limit.defined {
-                    $cur_cmp = $limit cmp $current;
-                    if $previous.defined {
-                        my $previous_cmp = $previous cmp $limit;
-                        if ($is-geometric-switching-sign) {
-                            $cur_cmp = $limit.abs cmp $current.abs;
-                            $previous_cmp = $previous.abs cmp $limit.abs;
-                        }
-                        last if @args && $previous_cmp == $cur_cmp ;
-                    }
-                }
-                $previous = $current;
+            loop {                         #Then we extrapolate using $next and the $args
+                my $current = $next.(|@args) // last;
                 take $current ;
-                $count++;
-
-                last if $cur_cmp == 0;
-
-                @args.push($previous) if $count > $lhs-orig-count;
-                while @args.elems > $arity {
-                    @args.shift;
+                if $arity {
+                    @args.push($current) ;
+                    @args.munch(1) if @args.elems > $arity
                 }
             }
         }
     }
+
+    my $limit = ($rhs ~~ Whatever ?? Any !! $rhs);
+    return infinite-series(@lhs , $limit) unless $limit.defined; #Infinite series
+
+    fail ('Limit arity cannot be larger than 1') if 	$limit ~~ Code && $limit.count > 1;
+    my $series = infinite-series(@lhs , $limit);
+    gather {
+        while $series {
+            my $val = $series.shift();
+            if $val ~~  $limit {
+                take $val unless $exclude-limit ;
+                last ;
+            };
+            take $val;
+        }
+    }
+}
+
+our multi sub infix:<...>(@lhs, $limit) {
+    _HELPER_generate-series(@lhs, $limit )
+}
+our multi sub infix:<...^>(@lhs, $limit) {
+    _HELPER_generate-series(@lhs, $limit , :exclude-limit)
+}
+our multi sub infix:<...^>($lhs , $limit) {
+    $lhs.list ...^ $limit;
+}
+our multi sub infix:<...^>(@lhs, @rhs) {
+    fail "Need something on RHS" if !@rhs;
+    (@lhs ...^ @rhs.shift), @rhs
 }
 
 our multi sub infix:<...>($lhs, $rhs) {
@@ -492,12 +481,14 @@ our multi sub infix:<eqv>(Numeric $a, Numeric $b) {
 our multi sub infix:<Z>($lhs, $rhs) {
     my $lhs-list = flat($lhs.list);
     my $rhs-list = flat($rhs.list);
+    my ($a, $b);
     gather while ?$lhs-list && ?$rhs-list {
-        my $a = $lhs-list.shift;
-        my $b = $rhs-list.shift;
-        take $a;
-        take $b;
-    }
+        $a = $lhs-list.shift unless $lhs-list[0] ~~ ::Whatever;
+        take -> $q is copy { $q }($a);
+          # Workaround for RT #77302.
+        $b = $rhs-list.shift unless $rhs-list[0] ~~ ::Whatever;
+        take -> $q is copy { $q }($b);
+   }
 }
 
 our multi sub infix:<X>($lhs, $rhs) {

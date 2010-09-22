@@ -236,11 +236,17 @@ method statement($/, $key?) {
                 );
             }
             elsif ~$ml<sym> eq 'for' {
-                $past := PAST::Block.new( :blocktype('immediate'),
-                    PAST::Var.new( :name('$_'), :scope('parameter'), :isdecl(1) ),
-                    $past);
-                $cond := PAST::Op.new(:name('&flat'), $cond);
-                $past := PAST::Op.new($cond, $past, :pasttype(~$ml<sym>), :node($/) );
+                unless $past<block_past> {
+                    my $sig := Perl6::Compiler::Signature.new(
+                                   Perl6::Compiler::Parameter.new(:var_name('$_')));
+                    $past := block_closure(blockify($past, $sig), 'Block', 0);
+                }
+                $past := PAST::Op.new( 
+                             :pasttype<callmethod>, :name<map>, :node($/),
+                             PAST::Op.new( :name<&flat>, $cond ),
+                             $past
+                         );
+                $past := PAST::Op.new( :name<&eager>, $past, :node($/) );
             }
             else {
                 $past := PAST::Op.new($cond, $past, :pasttype(~$ml<sym>), :node($/) );
@@ -286,7 +292,7 @@ method pblock($/) {
     if $<lambda> eq '<->' {
         $signature.set_rw_by_default();
     }
-    add_signature($block, $signature, 0);
+    add_signature($block, $signature);
     # We ought to find a way to avoid this, but it seems necessary for now.
     $block.loadinit.push(
         PAST::Op.new( :pirop<setprop__vPsP>,
@@ -1140,7 +1146,7 @@ method routine_def($/) {
             pir::defined__IP($block<placeholder_sig>) ?? $block<placeholder_sig> !!
             Perl6::Compiler::Signature.new();
     $signature.set_default_parameter_type('Any');
-    add_signature($block, $signature, 1);
+    add_signature($block, $signature);
     if $<trait> {
         emit_routine_traits($block, $<trait>, 'Sub');
     }
@@ -1281,7 +1287,7 @@ method method_def($/) {
     }
 
     # Add signature to block.
-    add_signature($past, $sig, 1);
+    add_signature($past, $sig);
     $past[0].unshift(PAST::Var.new( :name('self'), :scope('lexical'), :isdecl(1), :viviself(sigiltype('$')) ));
     $past.symbol('self', :scope('lexical'));
 
@@ -1491,7 +1497,7 @@ method regex_def($/, $key?) {
         $sig.set_default_parameter_type('Any');
         $past[0].unshift(PAST::Var.new( :name('self'), :scope('lexical'), :isdecl(1), :viviself(sigiltype('$')) ));
         $past.symbol('self', :scope('lexical'));
-        add_signature($past, $sig, 1);
+        add_signature($past, $sig);
         $past.name($name);
         $past.blocktype("declaration");
         
@@ -1533,6 +1539,11 @@ method type_declarator:sym<enum>($/) {
         # Only support our-scoped so far.
         unless $*SCOPE eq '' || $*SCOPE eq 'our' {
             $/.CURSOR.panic("Do not yet support $*SCOPE scoped enums");
+        }
+
+        if $/.CURSOR.is_name(~$<name>[0]) {
+            $/.CURSOR.panic("Illegal redeclaration of symbol '"
+                             ~ $<name>[0] ~ "'");
         }
         
         # Install names.
@@ -1968,6 +1979,14 @@ method methodop($/) {
 
 method term:sym<self>($/) {
     make PAST::Var.new( :name('self'), :node($/) );
+}
+
+method term:sym<now>($/) {
+    make PAST::Op.new( :name('&term:<now>'), :node($/) );
+}
+
+method term:sym<time>($/) {
+    make PAST::Op.new( :name('&term:<time>'), :node($/) );
 }
 
 method term:sym<rand>($/) {
@@ -2677,7 +2696,7 @@ our %SUBST_ALLOWED_ADVERBS;
 our %SHARED_ALLOWED_ADVERBS;
 our %MATCH_ALLOWED_ADVERBS;
 INIT {
-    my $mods := 'i ignorecase s sigspace';
+    my $mods := 'i ignorecase s sigspace r ratchet';
     for pir::split__PSS(' ', $mods) {
         %SHARED_ALLOWED_ADVERBS{$_} := 1;
     }
@@ -3006,8 +3025,8 @@ class Perl6::RegexActions is Regex::P6Regex::Actions {
 }
 
 # Takes a block and adds a signature to it, as well as code to bind the call
-# capture against the signature. Returns the name of the signature setup block.
-sub add_signature($block, $sig_obj, $lazy) {
+# capture against the signature.  Returns the modified block.
+sub add_signature($block, $sig_obj) {
     # Set arity.
     $block.arity($sig_obj.arity);
 
@@ -3031,6 +3050,7 @@ sub add_signature($block, $sig_obj, $lazy) {
     my $lazysig := PAST::Block.new(:blocktype<declaration>, $sig_obj.ast(1));
     $block[0].push($lazysig);
     $block<lazysig> := PAST::Val.new( :value($lazysig) );
+    $block;
 }
 
 # Makes a lazy signature building block.
@@ -3397,7 +3417,7 @@ sub make_attr_init_closure($init_value) {
     my $sig := Perl6::Compiler::Signature.new(
         Perl6::Compiler::Parameter.new(:var_name('$_')));
     $sig.add_invocant();
-    add_signature($block, $sig, 1);
+    add_signature($block, $sig);
     @BLOCK[0].push($block);
 
     # Return a code object using a reference to the block.
@@ -3545,10 +3565,20 @@ sub whatever_curry($/, $past, $upto_arity) {
                 $past.unshift($right_new);
             }
             $past.unshift($left_new);
-            $past := make_block_from($sig, $past, 'WhateverCode');
+            $past := block_closure(blockify($past, $sig), 'WhateverCode', 0);
+            $past.returns('WhateverCode');
+            $past.arity($sig.arity);
         }
     }
     $past
+}
+
+sub blockify($past, $sig) {
+    add_signature( PAST::Block.new( :blocktype('declaration'),
+                       PAST::Stmts.new( ),
+                       PAST::Stmts.new( $past )
+                   ),
+                   $sig);
 }
 
 # Helper for constructing a simple Perl 6 Block with the given signature
@@ -3560,7 +3590,7 @@ sub make_block_from($sig, $body, $type = 'Block') {
             $body
         )
     );
-    add_signature($past, $sig, 1);
+    add_signature($past, $sig);
     create_code_object($past, $type, 0);
 }
 

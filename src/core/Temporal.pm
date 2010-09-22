@@ -91,15 +91,15 @@ class Dateish {
         [+] $.day, map { self.days-in-month($.year, $^m) }, 1 ..^ $.month
     }
 
-    method check-value($val is rw, $name, $range) {
-        $val = +$val;
+    method check-value($val is rw, $name, $range, :$allow-nonint) {
+        $val = $allow-nonint ?? +$val !! $val.Int;
         $val ~~ $range or
             or die "$name must be in {$range.perl}\n";
     }
   
     method check-date { 
     # Asserts the validity of and numifies $!year, $!month, and $!day.
-        $!year = +$!year;
+        $!year .= Int;
         self.check-value($!month, 'month', 1 .. 12);
         self.check-value($!day, "day of $!year/$!month",
             1 .. self.days-in-month);
@@ -121,14 +121,17 @@ class Dateish {
 
 }
 
-sub default-formatter(::DateTime $dt) {
-# ISO 8601 timestamp
+sub default-formatter(::DateTime $dt, Bool :$subseconds) {
+# ISO 8601 timestamp (well, not strictly ISO 8601 if $subseconds
+# is true)
     my $o = $dt.offset;
     $o %% 60
         or warn "Default DateTime formatter: offset $o not divisible by 60.\n";
-    sprintf '%04d-%02d-%02dT%02d:%02d:%02d%s',
-        $dt.year, $dt.month, $dt.day,
-        $dt.hour, $dt.minute, $dt.whole-second,
+    sprintf '%04d-%02d-%02dT%02d:%02d:%s%s',
+        $dt.year, $dt.month, $dt.day, $dt.hour, $dt.minute,
+        $subseconds
+          ?? $dt.second.fmt('%02f')
+          !! $dt.whole-second.fmt('%02d'),
         do $o
          ?? sprintf '%s%02d%02d',
                 $o < 0 ?? '-' !! '+',
@@ -155,7 +158,7 @@ class DateTime is Dateish {
     # Asserts the validity of and numifies $!hour, $!minute, and $!second.
         self.check-value($!hour, 'hour', 0 ..^ 24);
         self.check-value($!minute, 'minute', 0 ..^ 60);
-        self.check-value($!second, 'second', 0 ..^ 62);
+        self.check-value($!second, 'second', 0 ..^ 62, :allow-nonint);
         if $!second >= 60 {
             # Ensure this is an actual leap second.
             self.second < 61
@@ -175,7 +178,12 @@ class DateTime is Dateish {
             day => $date.day, |%_)
     }
 
-    # TODO: multi method new(Instant $i, ...) { ... }
+    multi method new(Instant $i, :$timezone=0, :&formatter=&default-formatter) {
+        my ($p, $leap-second) = $i.to-posix;
+        my $dt = self.new: floor($p - $leap-second), :&formatter;
+        $dt.clone(second => $dt.second + $p % 1 + $leap-second
+            ).in-timezone($timezone);
+    }
 
     multi method new(Int $time is copy, :$timezone=0, :&formatter=&default-formatter) {
     # Interpret $time as a POSIX time.
@@ -225,8 +233,7 @@ class DateTime is Dateish {
 
     multi method now(:$timezone=0, :&formatter=&default-formatter) {
     # FIXME: Default to the user's time zone instead of UTC.
-    # FIXME: Include fractional seconds.
-        self.new(time, :$timezone, :&formatter)
+        self.new(now, :$timezone, :&formatter)
     }
 
     multi method clone(*%_) {
@@ -245,7 +252,9 @@ class DateTime is Dateish {
             |%_)
     }
 
-    # TODO: multi method Instant() { ... }
+    multi method Instant() {
+        Instant.from-posix: self.posix + $.second % 1, $.second >= 60;
+    }
 
     multi method posix() {
         self.offset and return self.utc.posix;
