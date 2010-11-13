@@ -514,6 +514,25 @@ method statement_control:sym<use>($/) {
     make $past;
 }
 
+method statement_control:sym<require>($/) {
+    if $<module_name> && $<EXPR> {
+        $/.CURSOR.panic("require with argument list not yet implemented");
+    }
+    my $name_past := $<module_name>
+                    ?? PAST::Val.new(:value($<module_name><longname><name>.Str))
+                    !! $<EXPR>[0].ast;
+    my @module_loader := Perl6::Grammar::parse_name('Perl6::Module::Loader');
+    my $past := PAST::Op.new(
+        :node($/),
+        :pasttype('callmethod'),
+        :name('need'),
+        PAST::Var.new( :name(@module_loader.pop),
+                       :namespace(@module_loader), :scope('package') ),
+        $name_past
+    );
+    make $past;
+}
+
 method statement_control:sym<given>($/) {
     my $past := $<xblock>.ast;
     $past.push($past.shift); # swap [0] and [1] elements
@@ -2503,7 +2522,7 @@ method infix_circumfix_meta_operator:sym<« »>($/) {
 sub make_hyperop($/) {
     my $opsub := '&infix:<' ~ ~$/ ~ '>';
     unless %*METAOPGEN{$opsub} {
-        my $base_op := '&infix:<' ~ $<infixish><OPER>.Str ~ '>';
+        my $base_op := '&infix:<' ~ $<infixish>.Str ~ '>';
         my $dwim_lhs := $<opening> eq '<<' || $<opening> eq '«';
         my $dwim_rhs := $<closing> eq '>>' || $<closing> eq '»';
         $*UNITPAST.loadinit.push(PAST::Op.new(
@@ -2771,6 +2790,7 @@ method cleanup_modifiers($/) {
 method quote:sym<apos>($/) { make $<quote_EXPR>.ast; }
 method quote:sym<dblq>($/) { make $<quote_EXPR>.ast; }
 method quote:sym<qq>($/)   { make $<quote_EXPR>.ast; }
+method quote:sym<qw>($/)   { make $<quote_EXPR>.ast; }
 method quote:sym<q>($/)    { make $<quote_EXPR>.ast; }
 method quote:sym<Q>($/)    { make $<quote_EXPR>.ast; }
 method quote:sym<Q:PIR>($/) {
@@ -2855,6 +2875,9 @@ method quote:sym<s>($/) {
         $regex, $closure
     );
     self.handle_and_check_adverbs($/, %SUBST_ALLOWED_ADVERBS, 'substitution', $past);
+    if $/[0] {
+        pir::push__vPP($past, PAST::Val.new(:named('samespace'), :value(1)));
+    }
 
     $past := PAST::Op.new(
         :node($/),

@@ -207,10 +207,10 @@ S03-operators/subscript-vs-lt.t
 S03-operators/ternary.t
 S03-operators/so.t
 S03-operators/value_equivalence.t
-S03-series/arity0.t
-S03-series/arity-2-or-more.t
-S03-series/basic.t
-S03-series/nonnumeric.t
+S03-sequence/arity0.t
+S03-sequence/arity-2-or-more.t
+S03-sequence/basic.t
+S03-sequence/nonnumeric.t
 S03-smartmatch/any-any.t
 # S03-smartmatch/any-array-slice.t
 S03-smartmatch/any-array.t
@@ -387,7 +387,7 @@ S06-traits/is-rw.t
 S09-autovivification/autoincrement.t
 S09-autovivification/autovivification.t
 S09-subscript_slice/slice.t
-S09-typed-arrays/arrays.t
+# S09-typed-arrays/arrays.t
 S09-typed-arrays/hashes.t
 S10-packages/basic.t
 S10-packages/use-with-class.t
@@ -397,6 +397,7 @@ S10-packages/use-with-class.t
 S11-modules/lexical.t
 S11-modules/need.t
 # S11-modules/nested.t
+S11-modules/require.t
 # S12-attributes/class.t
 S12-attributes/clone.t
 S12-attributes/delegation.t
@@ -600,6 +601,7 @@ S32-temporal/calendar.t
 S32-temporal/Date.t
 S32-temporal/DateTime.t
 S32-temporal/DateTime-Instant-Duration.t
+S32-temporal/local.t
 S32-trig/e.t
 S32-trig/pi.t
 S32-trig/sin.t                                             # long

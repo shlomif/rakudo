@@ -1,7 +1,7 @@
-    Announce: Rakudo Perl 6 compiler development release #33 ("TODO")
+    Announce: Rakudo Perl 6 compiler development release #33 ("Milan")
 
 On behalf of the Rakudo development team, I'm happy to announce the
-August 2010 release of Rakudo Perl #33 "TODO".  Rakudo is an 
+August 2010 release of Rakudo Perl #33 "Milan".  Rakudo is an 
 implementation of Perl 6 on the Parrot Virtual Machine (see 
 <http://www.parrot.org>). The tarball for the September 2010 release
 is available from <http://github.com/rakudo/rakudo/downloads>.
@@ -12,7 +12,7 @@ Rakudo Star release, see <http://github.com/rakudo/star/downloads>.
 
 The Rakudo Perl compiler follows a monthly release cycle, with each release
 named after a Perl Mongers group. The September 2010 release is code named
-"TODO" in recognition of TODO
+"Milan", because the release manager happens to like the name :-)
 
 Some of the specific changes and improvements occurring with this
 release include:
@@ -28,7 +28,20 @@ release include:
 
 * Enumeration objects now conform much closer to the current specification
 
+* 'now' and 'time' are now terms (and not functions anymore). This means you
+  can now write 'time - 1' and do what you mean, but 'time()' does not work
+  anymore
+
 For a more detailed list of changes see "docs/ChangeLog".
+
+
+Deprecation notice:
+
+* Currently True and False evaluate as '1' and '0' in string context.
+  The specification has changed, and in the next release they will
+  evaluate to 'Bool::True' and 'Bool::False' in string context.
+  To get the old behaviour, use ~+True or ~+False.
+
 
 The development team thanks all of our contributors and sponsors for
 making Rakudo Perl possible, as well as those people who worked on 

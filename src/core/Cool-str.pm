@@ -33,7 +33,8 @@ augment class Cool {
         }
     }
 
-    multi method subst($matcher, $replacement, :ii(:$samecase), *%options) {
+    multi method subst($matcher, $replacement,
+                       :ii(:$samecase), :ss(:$samespace), *%options) {
         my @matches = self.match($matcher, |%options);
         return self unless @matches;
         return self if @matches == 1 && !@matches[0];
@@ -42,8 +43,9 @@ augment class Cool {
         for @matches -> $m {
             $result ~= self.substr($prev, $m.from - $prev);
 
-	    my $real_replacement = ~($replacement ~~ Callable ?? $replacement($m) !! $replacement);
-	    $real_replacement    = $real_replacement.samecase(~$m) if $samecase;
+            my $real_replacement = ~($replacement ~~ Callable ?? $replacement($m) !! $replacement);
+            $real_replacement    = $real_replacement.samecase(~$m) if $samecase;
+            $real_replacement    = $real_replacement.samespace(~$m) if $samespace;
             $result ~= $real_replacement;
             $prev = $m.to;
         }
@@ -83,6 +85,24 @@ augment class Cool {
         }
         $result;
     }
+
+    method samespace($other as Str) {
+        my @pieces = self.split(/\s+/);
+        my @new_spaces = $other.comb(/\s+/, @pieces-1);
+
+        my @new = @pieces[0..^@new_spaces] Z @new_spaces;
+
+        if @new_spaces < @pieces-1 {
+            my $remainder = self ~~ m:nth(@pieces-1)/\s+/;
+            @new.push(self.substr($remainder.from-1));
+        }
+        else {
+            @new.push(@pieces[*-1]);
+        }
+
+        return @new.join;
+    }
+
 
     multi method split(Regex $matcher, $limit = *, :$all) {
         my $c = 0;
@@ -144,6 +164,8 @@ augment class Cool {
     }
 
     multi method trans(*@changes) {
+        return self unless @changes;
+
         my sub expand($s) {
             return $s.list if $s ~~ Iterable|Positional;
             gather for $s.comb(/ (\w) '..' (\w) | . /, :match) {
@@ -156,12 +178,10 @@ augment class Cool {
         }
 
         my %c;
-        my %prefixes;
         for (@changes) -> $p {
-            die "$p.perl is not a Pair" unless $p ~~ Pair;
+            die "$p.perl() is not a Pair" unless $p ~~ Pair;
             my @from = expand $p.key;
             my @to   = expand $p.value;
-#            warn "Substitution is longer than pattern\n" if @to > @from;
             if @to {
                 @to = @to xx ceiling(@from / @to);
             } else {
@@ -169,46 +189,24 @@ augment class Cool {
             }
             for @from Z @to -> $f, $t {
                 if %c.exists($f) && %c{$f} ne $t {
-#                    warn "Ambiguous transliteration rule for '$f'; "
-#                         ~ "using the first one (transliteration to '$t')";
                 } else {
-                    if $f.chars > 1 {
-                        %prefixes{$f.substr(0, 1)} //= [];
-                        %prefixes{$f.substr(0, 1)}.push($f);
-                    }
                     %c{$f} = $t;
                 }
             }
         }
 
-        # should be replaced by a proper trie implementation
-        # at some point
-        for %prefixes.keys {
-            %prefixes{$_}.=sort({-.chars});
+        my $i = 0;
+        my $r = "";
+        my %h = %c.keys Z=> map { self.index($_) // Inf }, %c.keys;
+        while ($_ = %h.pairs.sort({-.chars}).min: *.value).value < Inf {
+            %h{.key} = self.index(.key, .value + 1) // Inf;
+            next if .value < $i;
+            $r ~= self.substr($i, .value - $i) ~ %c{.key};
+            $i = .value + .key.chars;
         }
+        $r ~= self.substr($i);
 
-        my @res;
-        my $l = $.chars;
-        loop (my $i = 0; $i < $l; ++$i) {
-            my $c = $.substr($i, 1);
-            my $success = 0;
-            if %prefixes.exists($c) {
-                for %prefixes{$c}.list {
-                    if self.substr($i, .chars) eq $_ {
-                        @res.push: %c{$_};
-                        $success = 1;
-                        $i += .chars - 1;
-                        last;
-                    }
-                }
-            }
-            unless $success {
-                @res.push: %c.exists($c)
-                            ?? %c{$c}
-                            !! $c;
-            }
-        }
-        @res.join: '';
+        return $r;
     }
 
 
@@ -367,7 +365,12 @@ augment class Cool {
     }
 
     multi method flip() is export {
-        (~self).split('').reverse().join;
+        ~ Q:PIR {
+            $P0 = box ''
+            $P1 = find_lex 'self'
+            $S0 = $P0.'reverse'($P1)
+            %r  = box $S0
+        }
     }
 
     # Not yet spec'd, I expect it will be renamed
@@ -449,6 +452,10 @@ our multi sub infix:<leg>($a, $b) {
 
 multi split ( $delimiter, $input, $limit = *, :$all ) {
     $input.split($delimiter, $limit, :$all);
+}
+
+our List multi comb ( Regex $matcher, Str $input, Int $limit = Inf ) {
+    $input.comb($matcher , $limit );
 }
 
 multi sub sprintf($str as Str, *@args) {

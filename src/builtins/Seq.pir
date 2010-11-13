@@ -37,6 +37,23 @@ Seqs are Lists of (immutable) values.
     .return (list)
 .end
 
+=item new_from_RPA
+
+Creates a new Seq from a ResizablePMCArray.
+
+=cut
+
+.namespace ['Seq']
+.sub 'new_from_RPA' :method
+    .param pmc rpa
+    .local pmc seq
+    seq = self.'new'()
+    setattribute seq, '@!rest', rpa
+    $P0 = get_hll_global 'True'
+    setattribute seq, '$!flat', $P0
+    .return (seq)
+.end
+
 =back
 
 =head2 Private methods
@@ -53,7 +70,8 @@ Create an element for the Seq (has the 'rw' property set).
 .sub '!elem' :method
     .param pmc item
     unless null item goto have_item
-    item = new ['Perl6Scalar']
+    item = get_hll_global 'Any'
+    .return (item)
   have_item:
     item = descalarref item
     $I0 = can item, 'item'
