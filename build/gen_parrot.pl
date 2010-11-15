@@ -35,18 +35,21 @@ close $REQ;
 
 {
     no warnings;
-    if (open my $REV, '-|', "parrot_install${slash}bin${slash}parrot_config revision") {
-        my $revision = <$REV>;
-        close $REV;
-        $revision =~ s/\s.*//s;
-        if (compare_parrot_revs($revision, $req) >= 0) {
-            print "Parrot $revision already available ($req required)\n";
-            exit(0);
+    eval {
+        if (open my $REV, '-|', "parrot_install${slash}bin${slash}parrot_config git_describe") {
+            my $revision = <$REV>;
+            close $REV;
+            $revision =~ s/\s.*//s;
+            if (compare_parrot_revs($revision, $req) >= 0) {
+                print "Parrot $revision already available ($req required)\n";
+                exit(0);
+            }
         }
-    }
+    };
 }
 
 print "Checking out Parrot $req via git...\n";
+my $fetched = 0;
 if (-d 'parrot') {
     if (-d 'parrot/.svn') {
         die "===SORRY===\n"
@@ -56,13 +59,14 @@ if (-d 'parrot') {
            ."the 'parrot' directory, and then re-run the command that caused\n"
            ."this error message\n";
     }
-    system_or_die(qw(git fetch));
 } else {
     system_or_die(qw(git clone git://github.com/parrot/parrot.git parrot));
+    $fetched = 1;
 }
 
 chdir('parrot') || die "Can't chdir to 'parrot': $!";
 
+system_or_die(qw(git fetch)) unless $fetched;
 system_or_die(qw(git checkout),  $req);
 
 ##  If we have a Makefile from a previous build, do a 'make realclean'
