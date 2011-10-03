@@ -1,30 +1,29 @@
-class Complex { ... }
 
-augment class Num does Real {
-    method Bridge() {
-        self;
+# XXX: Temporary definition of $Inf and $NaN until we have constants available
+# constant Inf = ...
+# constant NaN = ...
+my $Inf = nqp::p6box_n(pir::set__Ns('Inf'));
+my $NaN = nqp::p6box_n(pir::set__Ns('NaN'));
+
+my class Num {
+    method Num() { self }
+    method Bridge(Num:D:) { self }
+    
+    method Int(Num:D:) {
+        nqp::p6box_i(nqp::unbox_n(self));
     }
 
-    method Int() {
-        Q:PIR {
-            $P0 = find_lex 'self'
-            $I0 = $P0
-            $P1 = new ['Int']
-            $P1 = $I0
-            %r  = $P1
-        }
-    }
-
-    method Rat(Real $epsilon = 1.0e-6) {
+    method Rat(Num:D: Real $epsilon = 1.0e-6) {
         my sub modf($num) { my $q = $num.Int; $num - $q, $q; }
 
-        my $num = +self;
-        my $signum = $num < 0 ?? -1 !! 1;
+        my Num $num = self;
+        my Int $signum = $num < 0 ?? -1 !! 1;
         $num = -$num if $signum == -1;
 
         # Find convergents of the continued fraction.
 
-        my ($r, $q) = modf($num);
+        my Num $r = $num - $num.Int;
+        my Int $q = $num.Int;
         my ($a, $b) = 1, $q;
         my ($c, $d) = 0, 1;
 
@@ -43,204 +42,267 @@ augment class Num does Real {
         ($signum * $b) / $d;
     }
 
-    method Num() { self; }
+    multi method atan2(Num:D: Num:D $x = 1e0) {
+        nqp::p6box_n(pir::atan__NNn(nqp::unbox_n(self), nqp::unbox_n($x)));
+    }
 
-    method isNaN() {
+    multi method Str(Num:D:) {
+        nqp::p6box_s(nqp::unbox_n(self));
+    }
+
+    method succ(Num:D:) { self + 1e0 }
+
+    method pred(Num:D:) { self - 1e0 }
+
+    method isNaN(Num:D: ) {
         self != self;
     }
 
-    method ln(Num $x:) {
-        pir::ln__Nn($x);
+    method abs(Num:D: ) {
+        nqp::p6box_n(nqp::abs_n(nqp::unbox_n(self)));
     }
 
-    multi method perl() {
-        ~self;
+    multi method exp(Num:D: ) {
+        nqp::p6box_n(pir::exp__Nn(nqp::unbox_n(self)));
     }
 
-    method sqrt(Num $x:) {
-        pir::sqrt__Nn($x);
+    proto method log(|$) {*}
+    multi method log(Num:D: ) {
+        nqp::p6box_n(pir::ln__NN(nqp::unbox_n(self)));
+    }
+    multi method log(Num:D: Num \$base) {
+        self.log() / $base.log();
     }
 
-    method floor(Real $x:) {
-        given $x {
-            when NaN { NaN }
-            when Inf { Inf }
-            when -Inf { -Inf }
-            pir::box__PI(pir::floor__IN($x));
-        }
+    proto method sqrt(|$) {*}
+    multi method sqrt(Num:D: ) {
+        nqp::p6box_n(pir::sqrt__NN(nqp::unbox_n(self)));
     }
 
-    method ceiling(Num $x:) {
-        given $x {
-            when NaN { NaN }
-            when Inf { Inf }
-            when -Inf { -Inf }
-            pir::box__PI(pir::ceil__IN($x));
-        }
+    method rand(Num:D: ) {
+        nqp::p6box_n(pir::rand__NN(nqp::unbox_n(self)));
     }
 
-    method rand(Num $x:) {
-        pir::box__PN(pir::rand__NN($x))
+    method ceiling(Num:D: ) {
+        nqp::p6box_n(pir::ceil__NN(nqp::unbox_n(self)));
+    }
+    method floor(Num:D: ) {
+        nqp::p6bigint(pir::floor__NN(nqp::unbox_n(self)));
     }
 
-    method sin(Num $x: $base = Radians) {
-        pir::sin__Nn($x.to-radians($base));
+    proto method sin(|$) {*}
+    multi method sin(Num:D: ) {
+        nqp::p6box_n(pir::sin__NN(nqp::unbox_n(self)));
     }
-
-    method asin(Num $x: $base = Radians) {
-        pir::asin__Nn($x).from-radians($base);
+    proto method asin(|$) {*}
+    multi method asin(Num:D: ) {
+        nqp::p6box_n(pir::asin__NN(nqp::unbox_n(self)));
     }
-
-    method cos(Num $x: $base = Radians) {
-        pir::cos__Nn($x.to-radians($base));
+    proto method cos(|$) {*}
+    multi method cos(Num:D: ) {
+        nqp::p6box_n(pir::cos__NN(nqp::unbox_n(self)));
     }
-
-    method acos(Num $x: $base = Radians) {
-        pir::acos__Nn($x).from-radians($base);
+    proto method acos(|$) {*}
+    multi method acos(Num:D: ) {
+        nqp::p6box_n(pir::acos__NN(nqp::unbox_n(self)));
     }
-
-    method tan(Num $x: $base = Radians) {
-        pir::tan__Nn($x.to-radians($base));
+    proto method tan(|$) {*}
+    multi method tan(Num:D: ) {
+        nqp::p6box_n(pir::tan__NN(nqp::unbox_n(self)));
     }
-
-    method atan(Num $x: $base = Radians) {
-        pir::atan__Nn($x).from-radians($base);
+    proto method atan(|$) {*}
+    multi method atan(Num:D: ) {
+        nqp::p6box_n(pir::atan__NN(nqp::unbox_n(self)));
     }
-
-    method sec(Num $x: $base = Radians) {
-        pir::sec__Nn($x.to-radians($base));
+    proto method sec(|$) {*}
+    multi method sec(Num:D: ) {
+        nqp::p6box_n(pir::sec__NN(nqp::unbox_n(self)));
     }
-
-    method asec(Num $x: $base = Radians) {
-        pir::asec__Nn($x).from-radians($base);
+    proto method asec(|$) {*}
+    multi method asec(Num:D: ) {
+        nqp::p6box_n(pir::asec__NN(nqp::unbox_n(self)));
     }
-
-    method sinh(Num $x: $base = Radians) {
-        pir::sinh__Nn($x.to-radians($base));
+    method cosec(Num:D:) {
+        nqp::p6box_n(nqp::div_n(1, pir::sin__NN(nqp::unbox_n(self))));
     }
-
-    method asinh(Num $x: $base = Radians) {
-        ($x + ($x * $x + 1).sqrt).log.from-radians($base);
+    method acosec(Num:D:) {
+        nqp::p6box_n(pir::asin__NN(nqp::div_n(1, nqp::unbox_n(self))));
     }
-
-    method cosh(Num $x: $base = Radians) {
-        pir::cosh__Nn($x.to-radians($base));
+    method cotan(Num:D:) {
+        nqp::p6box_n(nqp::div_n(1, pir::tan__NN(nqp::unbox_n(self))));
     }
-
-    method acosh(Num $x: $base = Radians) {
-        ($x + ($x * $x - 1).sqrt).log.from-radians($base);
+    method acotan(Num:D:) {
+        nqp::p6box_n(pir::atan__NN(nqp::div_n(1, nqp::unbox_n(self))));
     }
-
-    method tanh(Num $x: $base = Radians) {
-        pir::tanh__Nn($x.to-radians($base));
+    proto method sinh(|$) {*}
+    multi method sinh(Num:D: ) {
+        nqp::p6box_n(pir::sinh__NN(nqp::unbox_n(self)));
     }
-
-    method atanh(Num $x: $base = Radians) {
-        (((1 + $x) / (1 - $x)).log / 2).from-radians($base);
+    proto method asinh(|$) {*}
+    multi method asinh(Num:D: ) {
+        (self + (self * self + 1).sqrt).log;
     }
-
-    method sech(Num $x: $base = Radians) {
-        pir::sech__Nn($x.to-radians($base));
+    proto method cosh(|$) {*}
+    multi method cosh(Num:D: ) {
+        nqp::p6box_n(pir::cosh__NN(nqp::unbox_n(self)));
     }
-
-    method asech(Num $x: $base = Radians) {
-        (1 / $x).acosh($base);
+    proto method acosh(|$) {*}
+    multi method acosh(Num:D: ) {
+        (self + (self * self - 1).sqrt).log;
     }
-
-    method cosech(Num $x: $base = Radians) {
-        1 / $x.sinh($base);
+    proto method tanh(|$) {*}
+    multi method tanh(Num:D: ) {
+        nqp::p6box_n(pir::tanh__NN(nqp::unbox_n(self)));
     }
-
-    method acosech(Num $x: $base = Radians) {
-        (1 / $x).asinh($base);
+    proto method atanh(|$) {*}
+    multi method atanh(Num:D: ) {
+        ((1 + self) / (1 - self)).log / 2;
     }
-
-    method cosec(Num $x: $base = Radians) {
-        1 / $x.sin($base);
+    proto method sech(|$) {*}
+    multi method sech(Num:D: ) {
+        nqp::p6box_n(pir::sech__NN(nqp::unbox_n(self)));
     }
-
-    method acosec(Num $x: $base = Radians) {
-        (1 / $x).asin($base);
+    proto method asech(|$) {*}
+    multi method asech(Num:D: ) {
+        (1 / self).acosh;
     }
-
-    method cotan(Num $x: $base = Radians) {
-        1 / $x.tan($base);
+    proto method cosech(|$) {*}
+    multi method cosech(Num:D: ) {
+        nqp::p6box_n(nqp::div_n(1, pir::sinh__NN(nqp::unbox_n(self))));
     }
-
-    method acotan(Num $x: $base = Radians) {
-        (1 / $x).atan($base);
+    proto method acosech(|$) {*}
+    multi method acosech(Num:D: ) {
+        (1 / self).asinh;
     }
-
-    method cotanh(Num $x: $base = Radians) {
-        1 / $x.tanh($base);
+    proto method cotanh(|$) {*}
+    multi method cotanh(Num:D: ) {
+        nqp::p6box_n(nqp::div_n(1, pir::tanh__NN(nqp::unbox_n(self))));
     }
-
-    method acotanh(Num $x: $base = Radians) {
-        (1 / $x).atanh($base);
-    }
-
-    method atan2(Num $y: $x = 1, $base = Radians) {
-        pir::atan__NNn($y, $x.Numeric.Num).from-radians($base);
+    proto method acotanh(|$) {*}
+    multi method acotanh(Num:D: ) {
+        (1 / self).atanh;
     }
 }
 
-multi sub infix:<cmp>(Num $a, Num $b) {
-    pir::cmp__INN($a, $b);
+my constant pi = 3.14159265e0;
+my constant e  = 2.71828183e0;
+
+multi prefix:<++>(Num:D \$a is rw) {   # XXX
+    $a = nqp::p6box_n(nqp::add_n(nqp::unbox_n($a), 1))
+}
+multi prefix:<++>(Num:U \$a is rw) {   # XXX
+    $a = 1e0;
+}
+multi prefix:<-->(Num:D \$a is rw) {   # XXX
+    $a = nqp::p6box_n(nqp::sub_n(nqp::unbox_n($a), 1))
+}
+multi prefix:<-->(Num:U \$a is rw) {   # XXX
+    $a = -1e0;
+}
+multi postfix:<++>(Num:D \$a is rw) {  # XXX
+    my $b = $a;
+    $a = nqp::p6box_n(nqp::add_n(nqp::unbox_n($a), 1));
+    $b
+}
+multi postfix:<++>(Num:U \$a is rw) {   # XXX
+    $a = 1e0;
+    0
+}
+multi postfix:<-->(Num:D \$a is rw) {  # XXX
+    my $b = $a;
+    $a = nqp::p6box_n(nqp::sub_n(nqp::unbox_n($a), 1));
+    $b
+}
+multi postfix:<-->(Num:U \$a is rw) {   # XXX
+    $a = -1e0;
+    0
 }
 
-multi sub infix:«<=>»(Num $a, Num $b) {
-    pir::cmp__INN($a, $b);
+multi prefix:<->(Num:D \$a) {
+    nqp::p6box_n(nqp::neg_n(nqp::unbox_n($a)))
 }
 
-multi sub infix:«==»(Num $a, Num $b) {
-    pir::iseq__INN( $a, $b) ?? True !! False
+multi prefix:<abs>(Num:D \$a) {
+    nqp::p6box_n(nqp::abs_n(nqp::unbox_n($a)))
 }
 
-multi sub infix:«!=»(Num $a, Num $b) {
-    pir::iseq__INN( $a, $b) ?? False !! True # note reversed
+multi infix:<+>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::add_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
-multi sub infix:«<»(Num $a, Num $b) {
-    pir::islt__INN( $a, $b) ?? True !! False
+multi infix:<->(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::sub_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
-multi sub infix:«>»(Num $a, Num $b) {
-    pir::isgt__INN( $a, $b) ?? True !! False
+multi infix:<*>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::mul_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
-multi sub infix:«<=»(Num $a, Num $b) {
-    pir::isgt__INN( $a, $b) ?? False !! True # note reversed
+multi infix:</>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::div_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
-multi sub infix:«>=»(Num $a, Num $b) {
-    pir::islt__INN( $a, $b) ?? False !! True # note reversed
+multi infix:<%>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::mod_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
-# Arithmetic operators
-
-multi sub prefix:<->(Num $a) {
-    pir::neg__NN($a);
-}
-
-multi sub infix:<+>(Num $a, Num $b) {
-    pir::add__NNN($a, $b)
-}
-
-multi sub infix:<->(Num $a, Num $b) {
-    pir::sub__NNN($a, $b)
-}
-
-multi sub infix:<*>(Num $a, Num $b) {
-    pir::mul__NNN($a, $b)
-}
-
-multi sub infix:</>(Num $a, Num $b) {
-    pir::div__NNN($a, $b)
-}
-
-multi sub infix:<**>(Num $a, Num $b) {
-    pir::pow__NNN($a, $b)
+multi infix:<**>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::pow_n(nqp::unbox_n($a), nqp::unbox_n($b)))
 }
 
 
-# vim: ft=perl6
+multi infix:<cmp>(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::cmp_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:«<=>»(Num:D \$a, Num:D \$b) {
+    nqp::p6box_n(nqp::cmp_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:<===>(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::iseq_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:<==>(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::iseq_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:<!=>(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::isne_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:«<»(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::islt_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:«<=»(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::isle_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:«>»(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::isgt_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+multi infix:«>=»(Num:D \$a, Num:D \$b) {
+    nqp::p6bool(nqp::isge_n(nqp::unbox_n($a), nqp::unbox_n($b)))
+}
+
+sub rand() {
+    nqp::p6box_n(pir::rand__NN(1));
+}
+
+# TODO: default seed of 'time'
+sub srand(Int $seed) {
+    nqp::p6box_i(pir::srand__0I($seed))
+}
+
+multi sub atan2(Num:D $a, Num:D $b = 1e0) {
+    nqp::p6box_n(pir::atan__NNn(nqp::unbox_n($a), nqp::unbox_n($b)));
+}
+
+multi sub cosec(Num:D \$x) {
+    nqp::p6box_n(nqp::div_n(1, pir::sin__NN(nqp::unbox_n($x))));
+}
+multi sub acosec(Num:D \$x) {
+    nqp::p6box_n(pir::asin__NN(nqp::div_n(1, nqp::unbox_n($x))));
+}

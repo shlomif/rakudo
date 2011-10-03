@@ -79,15 +79,18 @@ if ($archive) {
 
 if (eval "require $tap_harness_class;") {
     my %harness_options = (
-        exec        => ['./perl6'],
+        exec        => [$ENV{HARNESS_PERL}],
         verbosity   => 0+$Test::Harness::verbose,
-        jobs        => $ENV{TEST_JOBS} || $jobs || 1,
+        jobs        => $jobs || $ENV{TEST_JOBS} || 1,
         ignore_exit => 1,
         merge       => 1,
         $archive ? ( archive => $archive ) : (),
         $extra_properties ? ( extra_properties => $extra_properties ) : (),
     );
     $tap_harness_class->new( \%harness_options )->runtests(@tfiles);
+}
+elsif ($archive) {
+    die "Can't load $tap_harness_class, which is needed for smolder submissions: $@";
 }
 else {
     runtests(@tfiles);

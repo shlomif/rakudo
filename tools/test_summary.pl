@@ -9,8 +9,11 @@
 ##  passed, failed, todoed, skipped, executed and planned test results.
 ##
 ##  Usage:
-##     tools/test_summary.pl [testlist]
+##     tools/test_summary.pl [--timing | --view] [testlist]
 ##
+##  The --timing option enables microsecond timing per test saved
+##      in docs/test_summary.times.
+##  The --view option renders docs/test_summary.times in various reports
 ##  If supplied, C<testlist> identifies an alternate list of tests
 ##  to use (e.g., t/localtest.data).
 
@@ -18,10 +21,18 @@ use strict;
 use warnings;
 use Time::Local;
 use Time::HiRes;
+use Getopt::Long;
+
+my $timing;
+my $view;
+unless (GetOptions('timing' => \$timing, 'view' => \$view)) {
+    die "$0 cannot handle the unknown option\n";
+}
+if ($view) { Simple::Relative::Benchmarking::view(); exit(0); }
 
 my $benchmark;
 # Comment out the next line to skip benchmarking; see docs below
-$benchmark = Simple::Relative::Benchmarking::begin();    # defined below
+$benchmark = Simple::Relative::Benchmarking::begin() if $timing;
 
 # Build the list of test scripts to run in @tfiles
 my $testlist = $ARGV[0] || 't/spectest.data';
@@ -81,7 +92,7 @@ for my $tfile (@tfiles) {
     my $th;
     open($th, '<', $tfile) || die "Can't read $tfile: $!\n";
     my ($pass,$fail,$todo,$skip,$plan,$abort,$bonus) = (0,0,0,0,0,0,0);
-    my $no_plan = 0; # planless may be fine, but bad for statistics
+    my $no_plan = 0; # planless works, but is unhelpful for statistics
     # http://www.shadowcat.co.uk/blog/matt-s-trout/a-cunning-no_plan/
     while (<$th>) {                # extract the number of tests planned
         if (/^\s*plan\D*(\d+)/) { $plan = $1; last; }
@@ -108,16 +119,14 @@ for my $tfile (@tfiles) {
     for (@results) {
         # Pass over the optional line containing "1..$planned"
         if    (/^1\.\.(\d+)/)      { $plan = $1 if $1 > 0; next; }
-        # Handle lines containing timestamps
-        if    (/^# t=(\d+\.\d+)/)  {
-            # Calculate the per test execution time
-            $time2 = $time1;
-            $time1 = $1;
-            my $microseconds = int( ($time1 - $time2) * 1_000_000 );
+        # Handle lines containing test times
+        if    (/^# t=(\d+)/)  {
+            my $microseconds = $1;
             if ( $testnumber > 0 ) {
-                $times[$testnumber] = $microseconds;
+                # Do this only if the time was after a test result
+                $times[   $testnumber] = $microseconds;
                 $comments[$testnumber] = $test_comment;
-                $testnumber = 0;
+                $testnumber = 0;  # must see require another "ok $n" first
             }
             next;
         }
@@ -183,21 +192,48 @@ defined $benchmark && $benchmark->end(); # finish simple relative benchmarking
 # Implementing 'no_plan' or 'plan *' in test scripts makes this total
 # inaccurate.
 for my $syn (sort keys %syn) {
-    my $ackcmd = "ack ^plan t/spec/$syn* -wH"; # some systems use ack-grep
-    my @results = `$ackcmd`;       # gets an array of all the plan lines
-    my $spec = 0;
-    for (@results) {
-        my ($fn, undef, $rest) = split /:/, $_;
-        if (exists $plan_per_file{$fn}) {
-            $spec += $plan_per_file{$fn}
-        } else {
-            # unreliable because some tests use expressions
-            $spec += $1 if $rest =~ /^\s*plan\s+(\d+)/;
+    my $grepcmd = "grep ^plan t/spec/$syn*/* -rHn"; # recurse, always say filename, include line number for troubleshooting
+    my @grep_output = `$grepcmd`; # gets an array of all the plan lines
+    my $total_tests_planned_per_synopsis = 0;
+    for (@grep_output) {
+        # Most test scripts have a conventional 'plan 42;' or so near
+        # the beginning which is what we need.  Unfortunately some have
+        # 'plan $x*$y;' or so, which we cannot dynamically figure out.
+
+        # Example grep output: t/spec/S02-names/our.t:4:plan 10;
+        # Extract the filename and plan count from that if possible.
+        if ( m/ ^ ([^:]*) : \d+ : plan (.*) $ /x ) {
+            my ( $filename, $planexpression ) = ( $1, $2 );
+            my $script_planned_tests = 0;
+            if ( $filename =~ m/\.t$/ ) {
+                if ( $planexpression =~ m/ ^ \s* (\d+) \s* ; $ /x ) {
+                    # A conventional 'plan 42;' type of line
+                    $script_planned_tests = $1;
+                }
+                else {
+                    # It is some other plan argument, either * or variables.
+                    # A workaround is to get the actual number of tests run
+                    # from the output and just assume is the same number,
+                    # but sometimes that is missing too.
+                    if ( exists $plan_per_file{$filename} ) {
+                        $script_planned_tests = $plan_per_file{$filename};
+                    }
+                }
+            }
+            $total_tests_planned_per_synopsis += $script_planned_tests;
         }
     }
-    $sum{"$syn-spec"} = $spec;
-    $sum{'spec'} += $spec;
+    $sum{"$syn-spec"} = $total_tests_planned_per_synopsis;
+    $sum{'spec'}     += $total_tests_planned_per_synopsis;
 }
+
+# Planless testing (eg 'plan *;') is useless for static analysis, making
+# tools jump through hoops to calculate the number of planned tests.
+# This part display hints about the scripts that could easily be edited
+# make life easier on the reporting side.
+# A test suite author can follow the hints and write the automatically
+# counted number of tests into the test script, changing it back from
+# planless to planned.
 
 if (@plan_hint) {
     print "----------------\n";
@@ -249,7 +285,9 @@ else {
 
 package Simple::Relative::Benchmarking;
 
-sub begin {       # this constructor starts simple relative benchmarking
+# begin
+# Initialize simple relative benchmarking.  Called before the first test
+sub begin {
     my $timings = shift || 5;    # number of timings to keep (default 5)
     my $self = {};
     my @test_history;
@@ -275,12 +313,12 @@ sub begin {       # this constructor starts simple relative benchmarking
     }
     open( $self->{'file_out'}, '>', 'docs/test_summary.times.tmp') or die "cannot create docs/test_summary.times.tmp: $!";
     my $parrot_version = qx{./perl6 -e'print \$*VM<config><revision>'};
-    my $rakudo_version = qx{git log --oneline --max-count=1 .}; chomp $rakudo_version;
+    my $rakudo_version = qx{git log --pretty=oneline --abbrev-commit --max-count=1 .}; chomp $rakudo_version;
+    $rakudo_version =~ s/^([0-9a-f])+\.\.\./$1/; # delete possible ... 
     $rakudo_version =~ s/\\/\\\\/g; # escape all backslashes
     $rakudo_version =~ s/\"/\\\"/g; # escape all double quotes
     my $file_out = $self->{'file_out'};
-    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
-        gmtime(time());
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime(time());
     push @test_history, sprintf("[\"%4d-%02d-%02d %02d:%02d:%02d\",%d,\"%s\"]",
         $year+1900, $mon+1, $mday, $hour, $min, $sec,
         $parrot_version, $rakudo_version );
@@ -294,12 +332,17 @@ sub begin {       # this constructor starts simple relative benchmarking
     return bless $self;
 }
 
-# track simple relative benchmarking
+# Track simple relative benchmarking.  Called after running each test script.
 sub log_script_times {
     my $self      = shift;
     my $test_name = shift;
     my $ref_times = shift;
     my $ref_comments = shift;
+    # Make local arrays of the execution times in microseconds, and test
+    # comments (or descriptions).  Since tests are being added to and
+    # removed from the test suite, test numbers change over time.  The
+    # comments are sometimes empty or duplicated, but they are the only
+    # way to correlate test results if the test suite is edited.
     my (@times) = @$ref_times;
     my (@comments) = @$ref_comments;
     shift @times;     # offset by 1: the first result becomes $times[0];
@@ -358,6 +401,7 @@ sub log_script_times {
         qq'\n  ]';
 }
 
+# Finish simple relative benchmarking.  Called after the first test
 sub end {
     my $self = shift;
     my $file_in  = $self->{'file_in'};
@@ -367,6 +411,74 @@ sub end {
     close $file_in or warn $!;
     unlink 'docs/test_summary.times';
     rename 'docs/test_summary.times.tmp', 'docs/test_summary.times';
+}
+
+# Report on simple relative benchmarking.  Does the --view option
+sub view
+{
+    my $choice = '1'; my $choiceA; my $choiceB;
+    do {
+        my ($input, $output, $t, @timings, $script, @z, @sorted, @runs);
+        my @ordername = ('', 'sorted by time', 'sorted by %change', 'sorted by time change', 'in test order' );
+        open($input, '<', 'docs/test_summary.times') or die "$0 cannot open docs/test_summary.times\n";
+        while (<$input>) {  # custom parser to avoid dependency on JSON.pm
+            # a commit identification line
+            if (/^\s\s\[\"([^"]*)\",\d+,\"([^"]*)\"/) { push @runs, { 'time'=>$1, 'comment'=>$2 }; }
+            # test script name
+            if (/^\s\s\"(.+)\":\[$/x) { $script = $1; }
+            # individual test times
+            if (/^\s\s\s\[(\d+),\[([0-9,]+)\],\"(.*)\"\],/x) {
+                unless (defined $choiceA) { $choiceB = $#runs; $choiceA = $choiceB-1; }
+                my $testnumber = $1;
+                my @times = split /,/, $2;
+                push @times, 0 while @times < 5;
+                my $testcomment = $3;
+                if ($times[$choiceA] > 0 && $times[$choiceB] > 0) {
+                    push @timings, [ [@times], $testcomment, $testnumber, $script];
+                }
+            }
+        }
+        close($input);
+        @z=();  # Prepare to sort using a Schwartzian transform
+        if ($choice eq '1') { # by execution time
+            for my $t ( @timings ) { push @z, $$t[0][$choiceB]; }
+        }
+        elsif ($choice eq '2') { # by relative speedup/slowdown
+            for my $t ( @timings ) { push @z, ($$t[0][$choiceB]-$$t[0][$choiceA])/$$t[0][$choiceA]; }
+        }
+        elsif ($choice eq '3') { # by absolute speedup/slowdown
+            for my $t ( @timings ) { push @z, ($$t[0][$choiceB]-$$t[0][$choiceA]); }
+        }
+        else {
+            @sorted = @timings; # choice '4' is unsorted, meaning in order of execution
+        }
+        @sorted = @timings[ sort { $z[$a] <=> $z[$b] } 0..$#timings ] if @z;
+        # Send the results to 'less' for viewing
+        open $output, ">", "/tmp/test_summary.$$" or die "$0 cannot output to 'less'\n";
+        print $output "Microseconds and relative change of spec tests $ordername[$choice].  Commits:\n";
+        print $output "A: $runs[$choiceA]{'time'} $runs[$choiceA]{'comment'}\n";
+        print $output "B: $runs[$choiceB]{'time'} $runs[$choiceB]{'comment'}\n";
+        print $output "     A     B  Chg Test description (script#test)\n";
+        for $t (@sorted) {
+            printf $output "%6d %5d %+3.0f%% %s (%s#%d)\n", $$t[0][$choiceA], $$t[0][$choiceB],
+                ($$t[0][$choiceB]-$$t[0][$choiceA])*100/$$t[0][$choiceA], $$t[1], $$t[3], $$t[2];
+        }
+        close $output;
+        system "less --chop-long-lines /tmp/test_summary.$$";
+        do {  # Prompt for user choice of sort order or commits
+            print 'view: sort by 1)time 2)%change 3)change 4)none, other 5)commits q)uit> ';
+            $choice = <STDIN>; chomp $choice;
+            if ($choice eq '5') {  # choose a commit
+                for (my $r=0; $r<@runs; ++$r) {
+                    print "$r: $runs[$r]{'time'} $runs[$r]{'comment'}\n";
+                }
+                print 'commit for column A: ';
+                $choiceA = <STDIN>; chomp $choiceA;
+                print 'commit for column B: ';
+                $choiceB = <STDIN>; chomp $choiceB;
+            }
+        } while index('5', $choice) >= 0;  # if user chose commits, must still choose sort order
+    } while index('1234', $choice) >= 0;   # if valid sort order (not 'q') then do another report
 }
 
 package main;
@@ -538,6 +650,8 @@ has been a change.  Consider whether to log total execution time per
 test script.
 
 Analyse and report useful results, such as the slowest n tests.
+
+Parse the `say now` output as well as `print pir::__time()`.
 
 =head1 SEE ALSO
 

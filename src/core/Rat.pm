@@ -1,42 +1,41 @@
-class Rat is Cool does Real {
+# XXX: should also be Cool, but attributes and MI don't seem to mix yet
+my class Rat is Real {
     has $.numerator;
     has $.denominator;
 
-
-    multi method new() {
-        self.bless(*, :numerator(0), :denominator(1));
-
-    }
-
-    multi method new(Int $numerator is copy, Int $denominator is copy) {
+    method new(Int \$nu = 0, Int \$de = 1) {
+        my $new := nqp::create(self);
+        my $gcd         = $nu gcd $de;
+        my $numerator   = $nu div $gcd;
+        my $denominator = $de div $gcd;
         if $denominator < 0 {
-            $numerator = -$numerator;
+            $numerator   = -$numerator;
             $denominator = -$denominator;
         }
-        my $gcd = pir::gcd__iii($numerator, $denominator);
-        $numerator = $numerator div $gcd;
-        $denominator = $denominator div $gcd;
-        self.bless(*, :numerator($numerator), :denominator($denominator));
+        $new.BUILD($numerator, $denominator);
+        $new;
+    }
+    submethod BUILD(Int \$nu, Int \$de) {
+        $!numerator   = $nu;
+        $!denominator = $de;
     }
 
-    multi method nude() { $.numerator, $.denominator; }
-
-    multi method perl() { "$!numerator/$!denominator"; }
-
-    method Bridge() {
-        $!denominator == 0 ?? Inf * $!numerator.sign
-                           !! $!numerator.Bridge / $!denominator.Bridge;
-    }
-
-    method Bool() { $!numerator != 0 ?? Bool::True !! Bool::False }
-
-    method Rat(Real $epsilon = 1.0e-6) { self; }
-
+    method nude() { $!numerator, $!denominator }
     method Num() {
-        $!denominator == 0 ?? Inf * $!numerator.sign
-                           !! $!numerator.Num / $!denominator.Num;
+        $!denominator == 0
+          ?? ($!numerator < 0 ?? -$Inf !! $Inf)
+          !!  $!numerator.Num / $!denominator.Num
     }
+    method Int() { self.Num.Int }
 
+    method Bridge() { self.Num }
+    method Rat(Rat:D: Real $?) { self }
+    multi method Str(Rat:D:) {
+        self.Num.Str
+    }
+    multi method perl(Rat:D:) {
+        $!numerator ~ '/' ~ $!denominator
+    }
     method succ {
         Rat.new($!numerator + $!denominator, $!denominator);
     }
@@ -46,68 +45,65 @@ class Rat is Cool does Real {
     }
 }
 
-multi sub prefix:<->(Rat $a) {
+multi prefix:<->(Rat \$a) {
     Rat.new(-$a.numerator, $a.denominator);
 }
 
-multi sub infix:<+>(Rat $a, Rat $b) {
-    my $gcd = pir::gcd__iii($a.denominator, $b.denominator);
+multi infix:<+>(Rat \$a, Rat \$b) {
+    my $gcd = $a.denominator gcd $b.denominator;
     ($a.numerator * ($b.denominator div $gcd) + $b.numerator * ($a.denominator div $gcd))
         / (($a.denominator div $gcd) * $b.denominator);
 }
-
-multi sub infix:<+>(Rat $a, Int $b) {
+multi sub infix:<+>(Rat \$a, Int \$b) {
     ($a.numerator + $b * $a.denominator) / $a.denominator;
 }
-
-multi sub infix:<+>(Int $a, Rat $b) {
+multi sub infix:<+>(Int \$a, Rat \$b) {
     ($a * $b.denominator + $b.numerator) / $b.denominator;
 }
 
-multi sub infix:<->(Rat $a, Rat $b) {
-    my $gcd = pir::gcd__iii($a.denominator, $b.denominator);
+multi sub infix:<->(Rat \$a, Rat \$b) {
+    my $gcd = $a.denominator gcd $b.denominator;
     ($a.numerator * ($b.denominator div $gcd) - $b.numerator * ($a.denominator div $gcd))
         / (($a.denominator div $gcd) * $b.denominator);
 }
 
-multi sub infix:<->(Rat $a, Int $b) {
+multi sub infix:<->(Rat \$a, Int \$b) {
     ($a.numerator - $b * $a.denominator) / $a.denominator;
 }
 
-multi sub infix:<->(Int $a, Rat $b) {
+multi sub infix:<->(Int \$a, Rat \$b) {
     ($a * $b.denominator - $b.numerator) / $b.denominator;
 }
 
-multi sub infix:<*>(Rat $a, Rat $b) {
+multi sub infix:<*>(Rat \$a, Rat \$b) {
     ($a.numerator * $b.numerator) / ($a.denominator * $b.denominator);
 }
 
-multi sub infix:<*>(Rat $a, Int $b) {
+multi sub infix:<*>(Rat \$a, Int \$b) {
     ($a.numerator * $b) / $a.denominator;
 }
 
-multi sub infix:<*>(Int $a, Rat $b) {
+multi sub infix:<*>(Int \$a, Rat \$b) {
     ($a * $b.numerator) / $b.denominator;
 }
 
-multi sub infix:</>(Rat $a, Rat $b) {
+multi sub infix:</>(Rat \$a, Rat \$b) {
     ($a.numerator * $b.denominator) / ($a.denominator * $b.numerator);
 }
 
-multi sub infix:</>(Rat $a, Int $b) {
+multi sub infix:</>(Rat \$a, Int \$b) {
     $a.numerator / ($a.denominator * $b);
 }
 
-multi sub infix:</>(Int $a, Rat $b) {
+multi sub infix:</>(Int \$a, Rat \$b) {
     ($b.denominator * $a) / $b.numerator;
 }
 
-multi sub infix:</>(Int $a, Int $b) {
+multi sub infix:</>(Int \$a, Int \$b) {
     Rat.new($a, $b);
 }
 
-multi sub infix:<**>(Rat $a, Int $b) {
-    ($a.numerator ** $b) / ($a.denominator ** $b);
+multi sub infix:<**>(Rat \$a, Int \$b) {
+    Rat.new($a.numerator ** $b,$a.denominator ** $b);
 }
 
-# vim: ft=perl6 sw=4 ts=4 expandtab

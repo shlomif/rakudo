@@ -1,23 +1,12 @@
-augment class Regex {
-    multi method ACCEPTS($topic) {
-        my $match = $topic.match(self);
-        pir::store_dynamic_lex__vSP('$/', $match);
-        $match
+my class Regex {
+    multi method ACCEPTS(Regex:D \$self: Mu \$topic) {
+        pir::find_caller_lex__Ps('$/')
+            = $self(Cursor."!cursor_init"($topic, :c(0))).MATCH;
     }
-    multi method ACCEPTS(@topic) {
-        my Mu $match = any(@topic).match(self);
-        pir::store_dynamic_lex__vSP('$/', $match);
-        $match
-    }
-    multi method ACCEPTS(%topic) {
-        my Mu $match = any(%topic.keys).match(self);
-        pir::store_dynamic_lex__vSP('$/', $match);
-        $match
-    }
-    method Bool() {
-        my $topic = pir::find_dynamic_lex__pS('$_');
-        my $match = $topic.match(self);
-        pir::store_dynamic_lex__vSP('$/', $match);
+    
+    multi method Bool(Regex:D:) {
+        my $match = pir::find_caller_lex__pS('$_').match(self);
+        pir::find_caller_lex__Ps('$/') = $match;
         $match.Bool()
     }
 }

@@ -1,28 +1,35 @@
-class IO::ArgFiles is IO {
-    has $!args;
+my class ArgFiles {
+    has $.args;
     has $.filename;
+    has $!io;
+    has $!ins;
 
-    method eof() {
-        ! $!args && $!filename.defined && (!pir::istrue($!PIO) || ?$!PIO.eof);
+    method eof() { 
+        ! $!args && $!io.opened && $!io.eof
     }
 
     method get() {
-        unless $!PIO {
+        unless $!io.defined && $!io.opened {
             $!filename = $!args ?? $!args.shift !! '-';
-            self.open($!filename, :r) ||
+            $!io = open($!filename, :r) ||
                 fail "Unable to open file '$!filename'";
         }
-        my $x = $!PIO.readline;
-        if $x eq '' && ?$!PIO.eof {
-            self.close;
-            $!PIO = Nil;
-            $!args ?? self.get !! fail "End of argfiles reached"
+        my $x = $!io.get;
+        while !$x.defined {
+            $!io.close;
+            $!io = IO;
+            fail "End of argfiles reached" unless $!args;
+            $x = self.get;
         }
-        else {
-            $!ins++;
-            $x.chomp;
+        $!ins++;
+        $x;
+    }
+
+    method lines($limit = *) {
+        my $l = $limit ~~ Whatever ?? $Inf !! $limit;
+        gather while $l-- > 0 {
+           take $.get // last;
         }
     }
 }
 
-# vim: ft=perl6

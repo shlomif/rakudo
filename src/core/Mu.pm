@@ -1,130 +1,321 @@
-subset Matcher of Mu where { .^can('ACCEPTS') };
-
-augment class Mu {
-    method Bool { $.defined }
-
-    method item {
-        # This is overridden by non-items.
-        self;
+my class Mu {
+    proto method ACCEPTS(|$) { * }
+    multi method ACCEPTS(Mu:U: Mu \$topic) {
+        nqp::p6bool(nqp::istype($topic, self))
     }
 
-    multi method notdef() { !self.defined; }
-
-    method note() {
-        note(self);
+    method WHERE() {
+        nqp::p6box_i(nqp::where(self))
     }
 
-    multi method so() { self.Bool }
-    multi method not() { self ?? False !! True }
+    method WHICH() {
+        nqp::p6box_i(nqp::where(self))
+    }
 
-    multi method perl() {
-        my sub typename(Mu $x) { pir::typeof__SP($x) };
-        my sub attribs(Mu $x, Mu $type) {
-            my @attr = $type.^attributes>>.name;
+    method WHY() {
+        self.HOW.docs // Any
+    }
+    
+    proto method Bool(|$) {*}
+    multi method Bool() {
+        self.defined
+    }
 
-            # TODO: get attribute per type, not globally
-            return @attr.map({
-                $_.substr(2) ~ ' => ' ~  pir::getattribute__PPS($x, $_).perl
-            }).join(', ');
+    method so() { self.Bool }
+    
+    method defined() {
+        nqp::p6bool(pir::repr_defined__IP(self))
+    }
+    
+    proto method new(|$) { * }
+    multi method new(*%attrinit) {
+        self.bless(*, |%attrinit);
+    }
+    multi method new($, *@) {
+        die "Default constructor only takes named arguments";
+    }
+    
+    method CREATE() {
+        nqp::create(self)
+    }
+    
+    method bless(Mu \$candidate, *@autovivs, *%attrinit) {
+        # If we were passed *, then need to create a candidate.
+        my $cand := nqp::istype($candidate, Whatever) ??
+            nqp::create(self) !!
+            $candidate;
+        $cand.BUILDALL(@autovivs, %attrinit);
+    }
+    
+    method BUILDALL(@autovivs, %attrinit) {
+        # Get the build plan. Note that we do this "low level" to
+        # avoid the NQP type getting mapped to a Rakudo one, which
+        # would get expensive.
+        my $build_plan := pir::find_method__PPs(self.HOW, 'BUILDALLPLAN')(self.HOW, self);
+        my int $count   = nqp::elems($build_plan);
+        my int $i       = 0;
+        while nqp::islt_i($i, $count) {
+            my $task := nqp::atpos($build_plan, $i);
+            $i = nqp::add_i($i, 1);
+            if nqp::iseq_i(nqp::atpos($task, 0), 0) {
+                # Custom BUILD call.
+                nqp::atpos($task, 1)(self, |%attrinit);
+            }
+            elsif nqp::iseq_i(nqp::atpos($task, 0), 1) {
+                # See if we have a value to initialize this attr
+                # with.
+                my $key_name := nqp::p6box_s(nqp::atpos($task, 2));
+                if %attrinit.exists($key_name) {
+                    # XXX Should not really need the decontainerize, but seems
+                    # that slurpy hashes sometimes lead to double containers
+                    # somehow...
+                    nqp::getattr(self, nqp::atpos($task, 1),
+                        nqp::atpos($task, 3)) = pir::nqp_decontainerize__PP(%attrinit{$key_name});
+                }
+            }
+            elsif nqp::iseq_i(nqp::atpos($task, 0), 2) {
+                unless nqp::attrinited(self, nqp::atpos($task, 1), nqp::atpos($task, 2)) {
+                    my $attr := nqp::getattr(self, nqp::atpos($task, 1), nqp::atpos($task, 2));
+                    $attr = nqp::atpos($task, 3)(self, $attr);
+                }
+            }
+            else {
+                die "Invalid BUILDALLPLAN";
+            }
         }
-
-        my $result = typename(self) ~ '.new('
-             ~ attribs(self, self)
-#             ~ self.^parents.map({typename($_) ~ '{'
-#                                  ~ attribs(self, $_) ~ '}' }).join(', '),
-             ~ ')';
-
-        $result;
-
+        self
     }
     
-    method print() {
-        print(self);
+    method BUILD_LEAST_DERIVED(%attrinit) {
+        # Get the build plan for just this class.
+        my $build_plan := pir::find_method__PPs(self.HOW, 'BUILDPLAN')(self.HOW, self);
+        my int $count   = nqp::elems($build_plan);
+        my int $i       = 0;
+        while nqp::islt_i($i, $count) {
+            my $task := nqp::atpos($build_plan, $i);
+            $i = nqp::add_i($i, 1);
+            if nqp::iseq_i(nqp::atpos($task, 0), 0) {
+                # Custom BUILD call.
+                nqp::atpos($task, 1)(self, |%attrinit);
+            }
+            elsif nqp::iseq_i(nqp::atpos($task, 0), 1) {
+                # See if we have a value to initialize this attr
+                # with.
+                my $key_name := nqp::p6box_s(nqp::atpos($task, 2));
+                if %attrinit.exists($key_name) {
+                    nqp::getattr(self, nqp::atpos($task, 1),
+                        nqp::atpos($task, 3)) = pir::nqp_decontainerize__PP(%attrinit{$key_name});
+                }
+            }
+            elsif nqp::iseq_i(nqp::atpos($task, 0), 2) {
+                unless nqp::attrinited(self, nqp::atpos($task, 1), nqp::atpos($task, 2)) {
+                    my $attr := nqp::getattr(self, nqp::atpos($task, 1), nqp::atpos($task, 2));
+                    $attr = nqp::atpos($task, 3)(self, $attr);
+                }
+            }
+            else {
+                die "Invalid BUILDALLPLAN";
+            }
+        }
+        self
     }
     
-    method say() {
-        say(self);
+    proto method Numeric(|$) { * }
+    multi method Numeric(Mu:U:) {
+        note 'Use of uninitialized value in numeric context';
+        0
+    }
+    
+    proto method Str(|$) { * }
+    multi method Str(Mu:U:) {
+        note 'Use of uninitialized value in string context';
+        ''
+    }
+    multi method Str(Mu:D:) {
+        self.HOW.name(self) ~ '<' ~ self.WHERE ~ '>'
     }
 
+    method Stringy() { self.Str }
+    
+    method item() { self }
+    
+    method say() { say(self) }
+    method print() { print(self) }
+
+    proto method gist(|$) { * }
+    multi method gist(Mu:U:) { self.HOW.name(self) ~ '()' }
+    multi method gist(Mu:D:) { self.perl }
+
+    proto method perl(|$) { * }
+    multi method perl(Mu:D:) { self.Str }
+    multi method perl(Mu:U:) { self.HOW.name(self) }
+
+    proto method DUMP(|$) { * }
+    multi method DUMP(Mu:D:) { self.perl }
+    multi method DUMP(Mu:U:) { self.perl }
+    method DUMP-ID() { self.HOW.name(self) ~ '<' ~ self.WHERE ~ '>' }
+    
+    proto method isa(|$) { * }
+    multi method isa(Mu $type) {
+        nqp::p6bool(self.HOW.isa(self, $type.WHAT))
+    }
+    multi method isa(Str:D $name) {
+        my @mro = self.HOW.mro(self);
+        my $i = 0;
+        while $i < +@mro {
+            my $obj = @mro[$i];
+            if $obj.HOW.name($obj) eq $name {
+                return Bool::True;
+            }
+            $i++;
+        }
+        Bool::False
+    }
+    
+    method does(Mu $type) {
+        nqp::p6bool(nqp::istype(self, $type.WHAT))
+    }
+    
+    method can($name) {
+        self.HOW.can(self, $name)
+    }
+    
+    method clone() {
+        my $cloned := pir::repr_clone__PP(pir::perl6_decontainerize__PP(self));
+        # XXX Probably need to clone containery things a level deeper.
+        $cloned
+    }
+    
     method Capture() {
         my %attrs;
-        my @mro = self, self.^parents;
-        for @mro -> $class {
-            for $class.^attributes() -> $attr {
-                if $attr.has_accessor {
-                    my $name = substr($attr.name, 2);
-                    %attrs{$name} //= self."$name"();
+        for self.^attributes -> $attr {
+            if $attr.has-accessor {
+                my $name = $attr.name.substr(2);
+                unless %attrs.exists($name) {
+                    %attrs{$name} = self."$name"();
                 }
             }
         }
-        %attrs.Capture()
+        %attrs.Capture
+    }
+    
+    # XXX TODO: Handle positional case.
+    method dispatch:<var>($var, *@pos, *%named) {
+        $var(self, |@pos, |%named)
+    }
+    
+    method dispatch:<::>($name, Mu $type, *@pos, *%named) {
+        unless nqp::istype(self, $type) {
+            die "Cannot dispatch to a method on " ~ $type.WHAT.perl ~
+                " because it is not inherited or done by " ~
+                self.WHAT.perl;
+        }
+        pir::find_method__PPS($type, $name)(self, |@pos, |%named)
+    }
+    
+    method dispatch:<!>($name, Mu $type, *@pos, *%named) {
+        my $meth := $type.HOW.find_private_method($type, $name);
+        $meth ??
+            $meth(self, |@pos, |%named) !!
+            die("Private method '$name' not found on type " ~ $type.HOW.name($type))
+            
+    }
+    
+    method dispatch:<.^>($name, *@pos, *%named) {
+        self.HOW."$name"(self, |@pos, |%named)
+    }
+    
+    method dispatch:<.=>(\$mutate: $name, *@pos, *%named) {
+        $mutate = $mutate."$name"(|@pos, |%named)
+    }
+    
+    method dispatch:<.?>($name, *@pos, *%named) {
+        pir::can__IPS(self, $name) ??
+            self."$name"(|@pos, |%named) !!
+            Nil
+    }
+    
+    method dispatch:<.+>($name, *@pos, *%named) {
+        my @result := self.dispatch:<.*>($name, |@pos, |%named);
+        if @result.elems == 0 {
+            die "Method '$name' not found for invocant of type '" ~
+                self.WHAT.perl ~ "'";
+        }
+        @result
+    }
+    
+    method dispatch:<.*>($name, *@pos, *%named) {
+        my @mro = self.HOW.mro(self);
+        my @results;
+        my $i = 0;
+        while $i < +@mro {
+            my $obj = @mro[$i];
+            my $meth = ($obj.HOW.method_table($obj)){$name};
+            if !$meth && $i == 0 {
+                $meth = ($obj.HOW.submethod_table($obj)){$name};
+            }
+            if $meth {
+                @results.push($meth(self, |@pos, |%named));
+            }
+            $i++;
+        }
+        &infix:<,>(|@results)
     }
 
-    method WALK(:$name!, :$canonical, :$ascendant, :$descendant, :$preorder, :$breadth,
-                :$super, Matcher :$omit, Matcher :$include) {
-        # First, build list of classes in the order we'll need them.
-        my @classes;
-        if $super {
-            @classes = self.^parents(:local);
-        } else {
-            if $breadth {
-                my @search_list = self.WHAT;
-                while @search_list {
-                    push @classes, @search_list;
-                    my @new_search_list;
-                    for @search_list -> $current {
-                        for $current.^parents(:local) -> $next {
-                            unless @new_search_list.grep(* === $next) {
-                                push @new_search_list, $next;
-                            }
-                        }
-                    }
-                    @search_list = @new_search_list;
-                }
-            } elsif $ascendant | $preorder {
-                sub build_ascendent(Mu $class) {
-                    unless @classes.grep(* === $class) {
-                        push @classes, $class;
-                        for $class.^parents(:local) {
-                            build_ascendent($^parent);
-                        }
-                    }
-                }
-                build_ascendent(self.WHAT);
-            } elsif $descendant {
-                sub build_descendent(Mu $class) {
-                    unless @classes.grep(* === $class) {
-                        for $class.^parents(:local) {
-                            build_descendent($^parent);
-                        }
-                        push @classes, $class;
-                    }
-                }
-                build_descendent(self.WHAT);
-            } else {
-                # Canonical, the default (just whatever the meta-class says) with us
-                # on the start.
-                @classes = self.^parents();
-                @classes.unshift(self.WHAT);
-            }
-        }
-
-        # Now we have classes, build method list.
-        my @methods;
-        for @classes -> $class {
-            if (!defined($include) || $include.ACCEPTS($class)) &&
-              (!defined($omit) || !$omit.ACCEPTS($class)) {
-                try {
-                    for $class.^methods(:local) -> $method {
-                        my $check_name = $method.?name;
-                        if $check_name.defined && $check_name eq $name {
-                            @methods.push($method);
-                        }
-                    }
-                }
-            }
-        }
-
-        return @methods;
+    method dispatch:<hyper>($name, *@pos, *%named) {
+        hyper( -> \$obj { $obj."$name"(|@pos, |%named) }, self )
     }
 }
+
+
+proto sub prefix:<defined>(|$) { * }
+multi sub prefix:<defined>(Mu \$x) { $x.defined }
+
+proto sub infix:<~~>(|$) { * }
+multi sub infix:<~~>(Mu \$topic, Mu \$matcher) {
+    $matcher.ACCEPTS($topic).Bool;
+}
+
+sub infix:<=:=>(Mu \$x, Mu \$y) { 
+    nqp::p6bool(nqp::iseq_i(nqp::where($x), nqp::where($y)));
+}
+
+proto sub infix:<eqv>(Mu $, Mu $) { * }
+multi sub infix:<eqv>(Mu $a, Mu $b) {
+    $a.WHICH eq $b.WHICH
+}
+
+multi sub infix:<eqv>(@a, @b) {
+    unless @a.WHAT === @b.WHAT && @a.elems == @b.elems {
+        return Bool::False
+    }
+    for ^@a -> $i {
+        unless @a[$i] eqv @b[$i] {
+            return Bool::False;
+        }
+    }
+    Bool::True
+}
+
+sub DUMP(|$) {
+    my Mu $args := pir::perl6_current_args_rpa__P();
+    my Mu $topic  := nqp::shift($args);
+    if nqp::isnull($topic) { '(null)' }
+    elsif pir::isa__IPs($topic, 'ResizablePMCArray') {
+        my $s = 'RPA<' ~ nqp::p6box_s(nqp::where($topic)) ~ '>(';
+        my $t = '';
+        $topic := nqp::clone($topic);
+        while $topic {
+            my Mu $x := nqp::shift($topic);
+            $s = $s ~ $t ~ DUMP($x);
+            $t = ', ';
+        }
+        $s ~ ')'
+    }
+    else { 
+        nqp::iscont($topic)
+          ?? "\x25b6" ~ $topic.DUMP() 
+          !! $topic.DUMP()
+    }
+};
+

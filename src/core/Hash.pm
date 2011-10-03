@@ -1,60 +1,50 @@
-role Hash is EnumMap {
-    method at_key($key) {
-        my $z = Any!butWHENCE(
-                    { pir::set__vQsP($!storage, $key, $z); }
-                );
-        Q:PIR {
-            .local pmc self
-            self = find_lex 'self'
-            $P0 = getattribute self, '$!storage'
-            $P1 = find_lex '$key'
-            %r = $P0[$P1]
-            unless null %r goto done
-            %r = find_lex '$z'
-          done:
-        }
+my class Hash {
+    # Has attributes and parent EnumMap declared in BOOTSTRAP
+
+    method new(*@args) { @args.hash }
+    
+    method at_key($key is copy) is rw {
+        $key = $key.Str;
+        self.exists($key)
+          ?? pir::find_method__PPs(EnumMap, 'at_key')(self, $key)
+          !! pir::setattribute__0PPsP(my $v, Scalar, '$!whence',
+                 -> { pir::find_method__PPs(EnumMap, 'STORE_AT_KEY')(self, $key, $v) } )
     }
 
-    method !STORE(\$to_store) {
-        # We create a new storage hash, in case we are referenced in
-        # what is being stored.
-        pir::setattribute__vPsP(self, '$!storage', pir::new__Ps('Hash'));
+    multi method perl(Hash:D \$self:) {
+        nqp::iscont($self)
+          ?? '{' ~ self.pairs.map({.perl}).join(', ') ~ '}'
+          !! '(' ~ self.pairs.map({.perl}).join(', ') ~ ').hash'
+    }
 
-        my $items = $to_store.flat;
+    method STORE_AT_KEY(Str \$key, Mu $x is copy) is rw {
+        pir::find_method__PPs(EnumMap, 'STORE_AT_KEY')(self, $key, $x);
+    }
+
+    method STORE(\$to_store) {
+        my $items = ($to_store,).flat.eager;
+        nqp::bindattr(self, EnumMap, '$!storage', pir::new__Ps('Hash'));
         while $items {
-            given $items.shift {
-                when Enum {
-                    self{.key} = .value;
-                }
-                when EnumMap {
-                    for $_.list { self{.key} = .value }
-                }
-                default {
-                    die('Odd number of elements found where hash expected')
-                        unless $items;
-                    self{$_} = $items.shift;
-                }
+            my Mu $x := $items.shift;
+            if Enum.ACCEPTS($x) { self.STORE_AT_KEY($x.key.Str, $x.value) }
+            elsif EnumMap.ACCEPTS($x) {
+                for $x.list { self.STORE_AT_KEY(.key.Str, .value) }
+            }
+            elsif $items { self.STORE_AT_KEY($x.Str, $items.shift) }
+            else {
+                die 'Odd number of elements found where hash expected'
             }
         }
         self
     }
 
-    method Bool() {
-        ?pir::istrue__IP(pir::getattribute__PPs(self, '$!storage'));
-    }
-
-    method delete(*@keys) {
-        my @deleted;
-        for @keys -> $k {
-            @deleted.push(self{$k});
-            Q:PIR {
-                $P0 = find_lex '$k'
-                $P1 = find_lex 'self'
-                $P1 = getattribute $P1, '$!storage'
-                delete $P1[$P0]
-            }
-        }
-        return |@deleted
+    method delete($key as Str) {
+        my Mu $val = self.at_key($key);
+        pir::delete(
+            nqp::getattr(self, EnumMap, '$!storage'),
+            nqp::unbox_s($key)
+        );
+        $val;
     }
 
     method push(*@values) {
@@ -62,10 +52,10 @@ role Hash is EnumMap {
         my $has_previous;
         for @values -> $e {
             if $has_previous {
-                self!push_construct($previous, $e);
+                self._push_construct($previous.Stringy, $e);
                 $has_previous = 0;
             } elsif $e ~~ Pair {
-                self!push_construct($e.key, $e.value);
+                self._push_construct($e.key.Stringy, $e.value);
             } else {
                 $previous = $e;
                 $has_previous = 1;
@@ -74,10 +64,12 @@ role Hash is EnumMap {
         if $has_previous {
             warn "Trailing item in Hash.push";
         }
+        return %(self);
     }
 
-    # push a value onto a hash Objectitem, constructing an array if necessary
-    method !push_construct(Mu $key, Mu $value) {
+    # push a value onto a hash slot, constructing an array if necessary
+    # XXX should be a private method
+    method _push_construct(Str $key, Mu $value) {
         if self.exists($key) {
             if self.{$key} ~~ Array {
                 self.{$key}.push($value);
@@ -88,81 +80,8 @@ role Hash is EnumMap {
             self.{$key} = $value;
         }
     }
-
-    method list() {
-        return self.pairs;
-    }
-
-    method hash() {
-        return self;
-    }
-
-    multi method sort(&by = &infix:<cmp>) {
-        self.pairs.sort(&by)
-    }
-
-    multi method pick($num is copy = 1) {
-        if ($num == 1) {
-            my @weights = [\+] self.values;
-            my $value = @weights[*-1].rand;
-            return self.keys[0] if @weights[0] > $value;
-            my ($l, $r) = (0, @weights.elems-1);
-            my $middle = floor ($r + $l) / 2;
-            while $middle > $l {
-                if @weights[$middle] < $value {
-                    $l = $middle;
-                }
-                else {
-                     $r = $middle;
-                }
-                $middle = floor ($r + $l) / 2;
-            }
-            return self.keys[$r];
-        }
-
-        my %copyHash = @.pairs.grep({ .value != 0});
-        gather {
-            while $num > 0 && %copyHash {
-                take my $picked = %copyHash.pick();
-                unless --%copyHash{$picked} {
-                    %copyHash.delete($picked);
-                }
-                $num--;
-            }
-        }
-    }
-
-    multi method pick(Whatever) {
-        self.pick(Inf);
-    }
-
-    multi method roll($num is copy = 1) {
-        if ($num == 1) {
-            my @weights = [\+] self.values;
-            my $value = @weights[*-1].rand;
-            return self.keys[0] if @weights[0] > $value;
-            my ($l, $r) = (0, @weights.elems-1);
-            my $middle = floor ($r + $l) / 2;
-            while $middle > $l {
-                if @weights[$middle] < $value {
-                    $l = $middle;
-                }
-                else {
-                     $r = $middle;
-                }
-                $middle = floor ($r + $l) / 2;
-            }
-            return self.keys[$r];
-        }
-
-        gather {
-            take self.roll() for ^$num;
-        }
-    }
-
-    multi method roll(Whatever) {
-        self.roll(Inf);
-    }
 }
 
 
+sub circumfix:<{ }>(*@elems) { my $x = Hash.new.STORE(@elems); }
+sub hash(*@a, *%h) { my % = @a, %h }
